@@ -20,10 +20,10 @@ import shutil
 import subprocess
 import sys
 import time
+from workspace_paths import workspace_root, node_executable
 
-ROOT = Path(r'D:\CADtest')
-RUNTIME = Path(r'C:\Program Files\WindowsApps\OpenAI.CodexPrimaryRuntime.v26-1104-1290-0_26.1104.1290.0_x64__3k8sg7r9htsxt\dependencies')
-NODE = RUNTIME / 'node/bin/node.exe'
+ROOT = workspace_root()
+NODE = os.environ.get('CADTEST_NODE') or shutil.which('node') or 'node'
 MIB = 1024 ** 2
 LOCK = Path('work/batch-validation-20261106/runner.lock')
 APP = Path(__file__).resolve().parent
@@ -36,7 +36,7 @@ PREPARE_REVIEW = APP_REL / 'prepare_review.py'
 INDEPENDENT_AUDIT = APP_REL / 'independent_projection_audit.py'
 # The projector's title/path geometry contract was reviewed against this exact
 # extractor. A rule change must be re-reviewed and differentially tested first.
-EXTRACTOR_CONTRACT_SHA256 = 'C65D65DBF81EC2F3CB429920BC6E760F15AE0A59B7FC715DA3EF1C2E6FA89D91'
+EXTRACTOR_CONTRACT_SHA256 = 'B4AAF735FCB31E4B8C9F7E845B85DE93E3135092F976F053CDF75BED9834F327'
 POLL_SECONDS = .05
 
 
@@ -85,7 +85,7 @@ def prepare_output(value, root=ROOT, *, require_new=False):
     out = local_path(value, root)
     output_root = (root / 'outputs').resolve()
     if out == output_root or not out.is_relative_to(output_root):
-        raise ValueError('--output must be a new directory strictly below D:/CADtest/outputs')
+        raise ValueError(f'--output must be a new directory strictly below {output_root}')
     # Drawing entry must claim a brand-new directory, including when it is empty.
     # Keep pre-staged selection/reference support for existing paired callers.
     if require_new and out.exists():
@@ -105,7 +105,9 @@ def workspace_lock(root=ROOT):
         raise RuntimeError('Windows Job Object and byte-range lock are required')
     import msvcrt
     # Exactly the old runner's path, byte and locking mode; OS releases on exit.
-    with (root / LOCK).open('a+b') as stream:
+    lock_path = local_path(LOCK, root)
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open('a+b') as stream:
         if stream.seek(0, 2) == 0:
             stream.write(b'0')
             stream.flush()
@@ -204,7 +206,7 @@ def freeze_sources(out, root=ROOT):
     native = root / APP_REL / 'native'
     native_source = root / APP_REL / 'native-source'
     if not (native / 'CADtest.exe').is_file() or not (native / 'CADtest.dll').is_file():
-        raise ValueError('Build src/CADtest.csproj first (native must support --wait-for-go)')
+        raise ValueError('Backend programs missing. Run Build.ps1 first (native must support --wait-for-go).')
     sources = {p: Path('src') / p.name for p in native_source.glob('*.cs')}
     sources.update({p: Path('src') / p.name for p in native_source.glob('*.csproj')})
     if not list(native_source.glob('*.cs')) or not list(native_source.glob('*.csproj')):
@@ -237,7 +239,8 @@ def freeze_sources(out, root=ROOT):
         for p in files:
             if p.is_file(): sources[p] = Path(dest) / p.relative_to(base)
     for p in (root / PYTHON_GATE, root / PREPARE_REVIEW, root / INDEPENDENT_AUDIT,
-              root / APP_REL / 'runner.py', root / APP_REL / 'parallel_runner.py'):
+              root / APP_REL / 'runner.py', root / APP_REL / 'parallel_runner.py',
+              root / APP_REL / 'workspace_paths.py'):
         sources[p] = p.relative_to(root)
     if not (root / APP_REL / 'projector/bin/Release/net10.0/Projector.exe').is_file():
         raise ValueError('Projector executable missing')
@@ -407,7 +410,9 @@ def command(args, folder, name, limits, *, wait_for_go=False, cwd=ROOT, control=
                 return result
         env = os.environ.copy()
         env.update({'DOTNET_DbgEnableMiniDump': '0', 'COMPlus_DbgEnableMiniDump': '0',
-                    'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'PYTHONDONTWRITEBYTECODE': '1'})
+                    'DOTNET_CLI_TELEMETRY_OPTOUT': '1', 'PYTHONDONTWRITEBYTECODE': '1',
+                    'PYTHONUTF8': '1', 'PYTHONIOENCODING': 'utf-8',
+                    'CADTEST_ROOT': str(Path(cwd).resolve())})
         with (folder / f'{name}.stdout.log').open('wb') as stdout, (folder / f'{name}.stderr.log').open('wb') as stderr:
             process = subprocess.Popen(result['command'], cwd=cwd, env=env, stdin=subprocess.PIPE if wait_for_go else subprocess.DEVNULL,
                                        stdout=stdout, stderr=stderr, creationflags=subprocess.CREATE_NO_WINDOW | subprocess.BELOW_NORMAL_PRIORITY_CLASS)
@@ -655,10 +660,10 @@ def parser():
     cli.add_argument('--output', required=True, help='Fresh outputs/ directory; no prior results permitted')
     inputs = cli.add_mutually_exclusive_group()
     inputs.add_argument('--selection', help='Selection JSON; defaults to output/selection.json')
-    inputs.add_argument('--drawing', nargs='+', help='Absolute workspace DWG paths; generate selection.json in a new output directory')
+    inputs.add_argument('--drawing', nargs='+', help='Workspace DWG paths (absolute or relative to workspace); generate selection.json in a new output directory')
     inputs.add_argument('--parallel-batch', help='JSON manifest for independent drawing tasks under a single workspace lock')
     cli.add_argument('--reference', help='Archive as excel-reference.json without parsing its contents')
-    cli.add_argument('--node', default=str(NODE))
+    cli.add_argument('--node', help='Node.js executable; otherwise CADTEST_NODE, bundled runtime, then PATH')
     cli.add_argument('--concurrency', type=int, choices=[1], default=1)
     cli.add_argument('--max-files', type=int, default=20, help='Maximum number of selected DWGs')
     cli.add_argument('--max-file-mib', type=float, default=64)
@@ -693,7 +698,7 @@ def main(argv=None, root=ROOT):
                 # Cheap path/count/size checks precede hashing. Placeholder hashes
                 # exist only in memory; the saved selection always has real SHAs.
                 selection = {'selected': [
-                    {'id': f'D{index:03d}', 'dwg': value, 'dwg_sha256': '0' * 64}
+                    {'id': f'D{index:03d}', 'dwg': str(local_path(value, root)), 'dwg_sha256': '0' * 64}
                     for index, value in enumerate(args.drawing, start=1)]}
                 preflight = inspect_selection(selection, limits, root, verify_hashes=False)
                 if preflight['status'] != 'admitted':
@@ -722,9 +727,7 @@ def main(argv=None, root=ROOT):
             if admission['status'] != 'admitted':
                 print('Batch rejected; see admission.json. No sample was started.', flush=True)
                 return 2
-            node = Path(args.node).resolve()
-            if not node.is_file():
-                raise ValueError(f'Node executable missing: {node}')
+            node = node_executable(args.node, root)
             frozen, manifest = freeze_sources(out, root)
             frozen_manifest_sha = sha(frozen / 'manifest.json')
             harness_sha = sha(__file__)

@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import {extractTreatment} from './polish-20261106/treatment.mjs';
-const root=process.argv[2]??'D:/CADtest/outputs/format-check-20261105';
+const root=process.argv[2];
+if(!root) throw new Error('Usage: node extract-requirement-frames.mjs <sample-folder> [projected-report.json]');
 // The original native report stays intact.  The runner supplies a bounded,
 // provenance-checked projection; omitting this argument preserves test replays.
 const report=JSON.parse(await fs.readFile(process.argv[3]??`${root}/cad-read-report.json`,'utf8'));

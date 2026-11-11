@@ -10,10 +10,16 @@ using System.Text.Json;
 using System.Text.Encodings.Web;
 
 Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+if (args.Length < 2 || args[0].StartsWith("--") || args[1].StartsWith("--"))
+{
+    Console.Error.WriteLine("Usage: CADtest <input.dwg> <output-directory> [--recognition-mode] [--wait-for-go]");
+    Environment.ExitCode = 2;
+    return;
+}
 if (args.Contains("--wait-for-go") && Console.ReadLine() != "GO") throw new InvalidOperationException("Resource guard handshake not received.");
 var recognitionMode = args.Contains("--recognition-mode");
-var input = args.Length > 0 ? Path.GetFullPath(args[0]) : @"D:\CADtest\inputs\27.21 TX26320-261113-DZN1-A(1).dwg";
-var output = args.Length > 1 ? Path.GetFullPath(args[1]) : @"D:\CADtest\outputs";
+var input = Path.GetFullPath(args[0]);
+var output = Path.GetFullPath(args[1]);
 Directory.CreateDirectory(output);
 var json = new JsonSerializerOptions { WriteIndented = true, PropertyNamingPolicy = JsonNamingPolicy.CamelCase, Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping };
 var numericAudit = new NumericSanitization();
