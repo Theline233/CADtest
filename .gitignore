@@ -1,7 +1,7 @@
 # Local customer data, outputs and secrets stay outside Git.
 /outputs/
 /inputs/
-/ui/
+/ui-inputs/
 /WebCAD-Preview/
 /.worktrees/
 .env
@@ -12,6 +12,7 @@
 *.dwg
 *.dxf
 *.xlsx
+!/ui/templates/ExactQuotationTemplate-native-korean-header.xlsx
 *.xls
 *.zip
 *.log

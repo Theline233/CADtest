@@ -1,8 +1,8 @@
 # CADtest
 
-本地 CAD 图纸明细提取后端：读取 DWG，提取图号、名称、材质、工艺、数量和单位，准备人工复核表，并在核对后导出 Excel。
+本地 CAD 图纸识别与复核工具：读取 DWG，提取图号、名称、材质、工艺、数量和单位，在桌面界面核对后导出 Excel。也可通过命令行使用后端。
 
-**当前只包含后端，支持 Windows 64 位。** 桌面前端后续单独接入；没有 Web API，也没有内嵌看图功能，需要看原图时自行使用 AutoCAD。识别结果需要人工核对，目前没有经过人工真值集验证的总体准确率承诺。
+**包含 WPF 桌面前端和后端，支持 Windows 64 位。** 没有 Web API 或内嵌 CAD 看图功能，需要看原图时自行使用 AutoCAD。识别结果需要人工核对，目前没有经过人工真值集验证的总体准确率承诺。
 
 ## 快速开始
 
@@ -14,6 +14,12 @@
 
 ~~~powershell
 .\Build.ps1
+.\Start.ps1
+~~~
+
+构建默认包含桌面前端，日常操作见 [桌面使用说明](ui/README.md)。仅构建后端可添加 -BackendOnly。命令行使用方式：
+
+~~~powershell
 New-Item -ItemType Directory -Path .\inputs -Force
 # 将需要处理的图纸复制为 inputs\sample.dwg 后运行：
 .\Run.ps1 -Mode Recognize -Drawing inputs\sample.dwg -Output outputs\first-run
@@ -37,6 +43,7 @@ New-Item -ItemType Directory -Path .\inputs -Force
 | -Python 或 CADTEST_PYTHON | 指定 Python；否则尝试仓库自带 runtime/python，再从 PATH 查找 |
 | -Node 或 CADTEST_NODE | 指定 Node.js；否则尝试 runtime/node/node.exe，再从 PATH 查找 |
 | CADTEST_ROOT | 可选的绝对工作区根目录，必须包含当前引擎；一般无需设置 |
+| CADTEST_POWERSHELL | 桌面程序可选的 PowerShell 7 路径，默认从 PATH 查找 |
 | NUGET_PACKAGES | 可选 NuGet 缓存位置；仓库不强制本机缓存路径 |
 
 ~~~powershell
@@ -51,7 +58,7 @@ New-Item -ItemType Directory -Path .\inputs -Force
 - 原始读取、分段投影、字段关联及预测均保存来源证据。
 - 支持多张独立任务并行，受内存、CPU、磁盘和共享锁约束。
 - 同图号兼容数量默认累加；整框打 X 的候选默认排除。冲突、缺单位、工艺范围和父子计价范围仍须核对。
-- 复核后导出通用明细，单价留空；桌面端的客户报价样式转换不在当前范围。
+- 后端导出通用确认明细；桌面端可导出中韩文报价样式，单价留空，保留复核和来源记录。
 - 单张默认上限 64 MiB，每批最多 20 张、总计 256 MiB；大图是否能处理还取决于图内结构和可用资源。
 - Windows Job Object、GO 握手、超时和冻结哈希检查继续启用。目前不支持在 Linux/macOS 上运行完整流程。
 
@@ -74,6 +81,7 @@ python -B .\tests\test_portability.py
 | 路径 | 内容 |
 | --- | --- |
 | Build.ps1 / Run.ps1 | 构建与运行入口 |
+| Start.ps1 / ui | 桌面启动入口、界面和经过元数据清理的样式模板 |
 | work/segmented-20261109/native-source | DWG 读取器源码 |
 | work/segmented-20261109/projector | 分段投影器源码 |
 | work/segmented-20261109/batch-fix-20261106 | 数量与预测规则 |
@@ -81,7 +89,7 @@ python -B .\tests\test_portability.py
 | work/segmented-20261109/review-source | 复核和通用 Excel 导出 |
 | tests | 不依赖客户图纸的迁移测试 |
 
-引擎目录名沿用当前结构，便于后续对接桌面前端。本次修改没有同步覆盖正在使用的桌面程序；前端合入时须一起迁移根目录、运行时和构建规则。
+引擎目录名沿用当前结构。桌面与后端使用同一工作区和运行时配置；源码构建不等于已制作可分发安装程序。
 
 ## 数据和公开范围
 
