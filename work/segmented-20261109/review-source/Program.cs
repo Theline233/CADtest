@@ -15,7 +15,11 @@ try
     var parameters=new Dictionary<string,string>(StringComparer.Ordinal);
     for(int i=1;i<args.Length;i+=2){if(i+1>=args.Length||!args[i].StartsWith("--")||!parameters.TryAdd(args[i][2..],args[i+1]))throw new ArgumentException("Invalid or repeated argument");}
     string Need(string name)=>parameters.TryGetValue(name,out var value)?value:throw new ArgumentException("Missing --"+name);
-    if(args[0]=="prepare")
+    if(args[0]=="runtime-info")
+    {
+        Console.WriteLine(JsonData.Text(new { runtime_directory=System.Runtime.InteropServices.RuntimeEnvironment.GetRuntimeDirectory(), version=Environment.Version.ToString() }));
+    }
+    else if(args[0]=="prepare")
     {
         ReviewWorkbooks.Prepare(Need("input"),Need("output"));
     }

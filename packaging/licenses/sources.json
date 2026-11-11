@@ -1,0 +1,136 @@
+[
+  {
+    "id": "ACadSharp",
+    "version": "3.8.35",
+    "repo": "DomCR/ACadSharp",
+    "ref": "90c6f871ff6f37a66170316ebd7a736c1b1ca828",
+    "files": [
+      {
+        "file": "ACadSharp-3.8.35-LICENSE",
+        "source": "https://raw.githubusercontent.com/DomCR/ACadSharp/90c6f871ff6f37a66170316ebd7a736c1b1ca828/LICENSE",
+        "sha256": "3ca5f3195b1f3056543596f7bb413bb143484c53ca9def699af8f7964f509190"
+      }
+    ]
+  },
+  {
+    "id": "ClosedXML",
+    "version": "0.105.1",
+    "repo": "ClosedXML/ClosedXML",
+    "ref": "b4ebe47bd3ecebf8480dea7422188d16b35b9d9a",
+    "files": [
+      {
+        "file": "ClosedXML-0.105.1-LICENSE",
+        "source": "https://raw.githubusercontent.com/ClosedXML/ClosedXML/b4ebe47bd3ecebf8480dea7422188d16b35b9d9a/LICENSE",
+        "sha256": "3071658fba9a054edce74e756314ba926fe3ffe5c6622f209d21a0c8f1d2a99e"
+      }
+    ]
+  },
+  {
+    "id": "ClosedXML.Parser",
+    "version": "2.0.0",
+    "repo": "ClosedXML/ClosedXML.Parser",
+    "ref": "658973aeedc2fe289e0ccba2bb9959f67692ded5",
+    "files": [
+      {
+        "file": "ClosedXML.Parser-2.0.0-LICENSE.txt",
+        "source": "https://raw.githubusercontent.com/ClosedXML/ClosedXML.Parser/658973aeedc2fe289e0ccba2bb9959f67692ded5/LICENSE.txt",
+        "sha256": "7133dfd8c1167ffa77389859013ac5bf2d184639f5a291a00d33b0b7d7b84df3"
+      }
+    ]
+  },
+  {
+    "id": "DocumentFormat.OpenXml",
+    "version": "3.1.1",
+    "repo": "dotnet/Open-XML-SDK",
+    "ref": "f9e6ad7524e22b6b1f932deabc9055201b7870c0",
+    "files": [
+      {
+        "file": "DocumentFormat.OpenXml-3.1.1-LICENSE",
+        "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/f9e6ad7524e22b6b1f932deabc9055201b7870c0/LICENSE",
+        "sha256": "ed03ba352313a4ba7019d5bed4bd3218ac17f3e44442a3bb1aaff54dcca9a2bc"
+      },
+      {
+        "file": "DocumentFormat.OpenXml-3.1.1-NOTICE",
+        "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/f9e6ad7524e22b6b1f932deabc9055201b7870c0/NOTICE",
+        "sha256": "17f127daf81a23e7835b735b91c7486fbc99538102942bf1bce8d73e63a65038"
+      }
+    ]
+  },
+  {
+    "id": "DocumentFormat.OpenXml.Framework",
+    "version": "3.1.1",
+    "repo": "dotnet/Open-XML-SDK",
+    "ref": "f9e6ad7524e22b6b1f932deabc9055201b7870c0",
+    "files": [
+      {
+        "file": "DocumentFormat.OpenXml.Framework-3.1.1-LICENSE",
+        "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/f9e6ad7524e22b6b1f932deabc9055201b7870c0/LICENSE",
+        "sha256": "ed03ba352313a4ba7019d5bed4bd3218ac17f3e44442a3bb1aaff54dcca9a2bc"
+      },
+      {
+        "file": "DocumentFormat.OpenXml.Framework-3.1.1-NOTICE",
+        "source": "https://raw.githubusercontent.com/dotnet/Open-XML-SDK/f9e6ad7524e22b6b1f932deabc9055201b7870c0/NOTICE",
+        "sha256": "17f127daf81a23e7835b735b91c7486fbc99538102942bf1bce8d73e63a65038"
+      }
+    ]
+  },
+  {
+    "id": "ExcelNumberFormat",
+    "version": "1.1.0",
+    "repo": "andersnm/ExcelNumberFormat",
+    "ref": "v1.1.0",
+    "files": [
+      {
+        "file": "ExcelNumberFormat-1.1.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/andersnm/ExcelNumberFormat/v1.1.0/LICENSE",
+        "sha256": "6650b0063a39e7dced886e53c6dac66fcd909beb8b9abb868452c9b621fa2018"
+      }
+    ]
+  },
+  {
+    "id": "RBush.Signed",
+    "version": "4.0.0",
+    "repo": "viceroypenguin/RBush",
+    "ref": "b8690322abac35d835baa2fdca4a3918ed77a910",
+    "files": [
+      {
+        "file": "RBush.Signed-4.0.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/viceroypenguin/RBush/b8690322abac35d835baa2fdca4a3918ed77a910/LICENSE",
+        "sha256": "f6bfae3ff6477fbca0c850f115da170516b1c633a98619ea5dcc6720dcdcb288"
+      }
+    ]
+  },
+  {
+    "id": "SixLabors.Fonts",
+    "version": "1.0.0",
+    "repo": "SixLabors/Fonts",
+    "ref": "32bef42997adb10268369ca149777f00e4241ce9",
+    "files": [
+      {
+        "file": "SixLabors.Fonts-1.0.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/SixLabors/Fonts/32bef42997adb10268369ca149777f00e4241ce9/LICENSE",
+        "sha256": "f38dc2765451fd2b19d7e0f47ed655f3a1cb889b28341ea6266efd75d8425a6f"
+      }
+    ]
+  },
+  {
+    "id": "System.IO.Packaging",
+    "version": "8.0.1",
+    "file": "System.IO.Packaging-8.0.1-LICENSE.txt",
+    "source": "NuGet package LICENSE.TXT",
+    "sha256": "d7a68596ab69b06f51ca278a6545148e4269a9381c26d597c13df5d88e08cf5b"
+  },
+  {
+    "id": "Node.js",
+    "version": "24.10.0",
+    "repo": "nodejs/node",
+    "ref": "v24.10.0",
+    "files": [
+      {
+        "file": "Node.js-24.10.0-LICENSE",
+        "source": "https://raw.githubusercontent.com/nodejs/node/v24.10.0/LICENSE",
+        "sha256": "537308465103a306d0e3eecf42632b4ff1b48aaaec044e9fc10a78c81fd00b34"
+      }
+    ]
+  }
+]

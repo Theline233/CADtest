@@ -1,0 +1,103 @@
+﻿; 由 Build-Package.ps1 生成。每用户安装（不需要管理员权限），默认装到 %LOCALAPPDATA%\Programs\CadReview。
+[Setup]
+AppId={{B6C3A0D2-5E7A-4F10-9C41-2D8E6F3A7B91}
+AppName=CAD 图纸复核工具
+AppVersion=@STAMP@
+AppPublisher=CadReview
+DefaultDirName={localappdata}\Programs\CadReview
+DefaultGroupName=CAD 图纸复核工具
+DisableProgramGroupPage=yes
+PrivilegesRequired=lowest
+ArchitecturesAllowed=x64compatible
+ArchitecturesInstallIn64BitMode=x64compatible
+OutputDir=@OUTPUT@
+OutputBaseFilename=CadReview-Setup-@STAMP@
+Compression=lzma2/normal
+SolidCompression=yes
+WizardStyle=modern
+UninstallDisplayIcon={app}\CadReviewUI.exe
+UninstallDisplayName=CAD 图纸复核工具
+CloseApplications=yes
+RestartApplications=no
+SetupLogging=yes
+; 给识别结果和导出文件预留 1 GiB
+ExtraDiskSpaceRequired=1073741824
+
+[Languages]
+Name: "chinesesimplified"; MessagesFile: "@LANGUAGE@"
+
+[Tasks]
+Name: "desktopicon"; Description: "创建桌面快捷方式(&D)"; GroupDescription: "附加任务："
+
+[Files]
+; 程序和运行时随安装更新；outputs（识别结果、复核存档、导出文件）和 ui-inputs 不在安装清单里，升级时不会被覆盖
+Source: "@PAYLOAD@\*"; DestDir: "{app}"; Excludes: "outputs\*,ui-inputs\*"; Flags: recursesubdirs createallsubdirs ignoreversion
+
+[Dirs]
+Name: "{app}\outputs"
+
+[Icons]
+Name: "{autoprograms}\CAD 图纸复核工具"; Filename: "{app}\CadReviewUI.exe"; WorkingDir: "{app}"
+Name: "{autodesktop}\CAD 图纸复核工具"; Filename: "{app}\CadReviewUI.exe"; WorkingDir: "{app}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\CadReviewUI.exe"; Description: "运行 CAD 图纸复核工具"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent
+
+[UninstallDelete]
+; 引擎运行时产生的锁文件等（程序文件由卸载程序按清单删除）
+Type: filesandordirs; Name: "{app}\work"
+
+[Code]
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if CurPageID = wpSelectDir then
+    if Length(WizardDirValue) > 60 then
+      Result := SuppressibleMsgBox('安装路径比较长（' + IntToStr(Length(WizardDirValue)) + ' 个字符）。识别时会生成很深的文件夹，路径过长可能超过 Windows 的 260 字符限制而失败。建议改用较短的路径，例如 C:\CadReview。' + #13#10#13#10 + '仍然使用这个路径吗？', mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDYES) = IDYES;
+end;
+
+procedure TryRemoveEmptyAppDirectory;
+var
+  AppDir: String;
+  Info: TFindRec;
+  OrdinaryDirectory: Boolean;
+begin
+  AppDir := ExpandConstant('{app}');
+  OrdinaryDirectory := False;
+  if FindFirst(AppDir, Info) then
+  begin
+    try
+      OrdinaryDirectory := (Info.Attributes and FILE_ATTRIBUTE_DIRECTORY <> 0) and
+        (Info.Attributes and FILE_ATTRIBUTE_REPARSE_POINT = 0);
+    finally
+      FindClose(Info);
+    end;
+  end;
+  if OrdinaryDirectory then
+  begin
+    // RemoveDir 只删除空目录，不递归；仍有复核数据或未知文件时保留。
+    if RemoveDir(AppDir) then
+      Log('Removed empty application directory after uninstall.')
+    else
+      Log('Application directory retained (not empty or unavailable).');
+  end;
+end;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  Data: String;
+begin
+  if CurUninstallStep = usPostUninstall then
+  begin
+    Data := ExpandConstant('{app}\outputs');
+    if DirExists(Data) then
+      // 必须用 SuppressibleMsgBox：普通 MsgBox 即使加了 /SUPPRESSMSGBOXES 也会弹出。静默卸载时取默认值“否”（保留结果）。
+      if SuppressibleMsgBox('是否同时删除识别结果、复核存档和导出的文件？' + #13#10#13#10 + '选“否”会保留它们，以后重新安装可以继续使用。', mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
+      begin
+        DelTree(Data, True, True, True);
+        DelTree(ExpandConstant('{app}\ui-inputs'), True, True, True);
+      end;
+    // 数据删除在卸载尾声发生；再尝试一次，仅删除空的普通目录。
+    TryRemoveEmptyAppDirectory;
+  end;
+end;
