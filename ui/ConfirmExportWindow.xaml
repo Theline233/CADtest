@@ -1,0 +1,67 @@
+<Window x:Class="CadReviewUI.ConfirmExportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="导出前确认" Width="520" Height="500" MinWidth="380" MinHeight="300"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False"
+        FontFamily="Microsoft YaHei UI" FontSize="14" Background="#F2F5F7"
+        Loaded="Window_Loaded">
+    <Grid Margin="18,16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock Text="导出前确认" FontSize="20" FontWeight="SemiBold" Foreground="#244256"/>
+            <TextBlock Margin="0,7,0,0" TextWrapping="Wrap" FontWeight="SemiBold" Foreground="#244256"
+                       Text="确认涵盖所列全部纳入图纸；有一张未核对请返回。"/>
+            <TextBlock Margin="0,5,0,0" TextWrapping="Wrap" Foreground="#405866"
+                       Text="本次纳入的待核明细将按图纸识别值导出。"/>
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel>
+                <StackPanel Margin="0,0,0,10">
+                    <TextBlock x:Name="CountText" TextWrapping="Wrap" Foreground="#405866"/>
+                    <TextBlock x:Name="ExcludedCountText" Margin="0,3,0,0" TextWrapping="Wrap" Foreground="#405866"/>
+                </StackPanel>
+                <Border Background="White" BorderBrush="#DCE5E9" BorderThickness="1" CornerRadius="6" Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="请确认以下内容：" FontWeight="SemiBold" Foreground="#244256"/>
+                        <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#243D4D">
+                            <Run Text="• 已对照原图核对："/><LineBreak/>
+                            <Run Text="　图号、名称、材质、表面处理、数量、单位与计入范围。"/>
+                        </TextBlock>
+                        <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#243D4D"
+                                   Text="• 已检查相同图号的重复图框是否应合并。"/>
+                        <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#556270"
+                                   Text="确认后程序会记录本次确认，无需手写核查说明。"/>
+                    </StackPanel>
+                </Border>
+                <Border Margin="0,10,0,0" Background="White" BorderBrush="#DCE5E9"
+                        BorderThickness="1" CornerRadius="6" Padding="14">
+                    <StackPanel>
+                        <TextBlock Text="本次图纸范围" FontWeight="SemiBold" Foreground="#244256"/>
+                        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap" Foreground="#556270"
+                                   Text="请逐张核对文件、导出条数和不导出的明细。"/>
+                        <TextBlock x:Name="ScopeSummaryText" Margin="0,10,0,0" TextWrapping="Wrap"
+                                   Foreground="#243D4D"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </ScrollViewer>
+
+        <Grid Grid.Row="2" Margin="0,14,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="4*"/>
+                <ColumnDefinition Width="6*"/>
+            </Grid.ColumnDefinitions>
+            <Button x:Name="ReturnButton" Content="返回核对" IsCancel="True"
+                    Margin="0,0,8,0" MinHeight="40" Padding="8,6"/>
+            <Button Grid.Column="1" Content="我已核对，确认导出" IsDefault="False"
+                    MinHeight="40" Padding="8,6" Background="#147A60" BorderBrush="#147A60"
+                    Foreground="White" Click="ConfirmExport_Click"/>
+        </Grid>
+    </Grid>
+</Window>

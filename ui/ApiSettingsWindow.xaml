@@ -1,0 +1,109 @@
+<Window x:Class="CadReviewUI.ApiSettingsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="API 设置" Width="990" Height="760" MinWidth="720" MinHeight="560"
+        WindowStartupLocation="CenterOwner" FontFamily="Microsoft YaHei UI" FontSize="13"
+        Background="#F3F5F7" Closing="Window_Closing">
+    <Window.Resources>
+        <Style TargetType="Button">
+            <Setter Property="Padding" Value="12,6"/>
+            <Setter Property="Margin" Value="0,0,8,8"/>
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="BorderBrush" Value="#B8C4CE"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style x:Key="PrimaryButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Background" Value="#1F7A5A"/>
+            <Setter Property="BorderBrush" Value="#1F7A5A"/>
+            <Setter Property="Foreground" Value="White"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="Margin" Value="0,3,0,10"/>
+        </Style>
+        <Style TargetType="PasswordBox">
+            <Setter Property="Padding" Value="6,5"/>
+            <Setter Property="Margin" Value="0,3,0,5"/>
+        </Style>
+        <Style x:Key="Hint" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="#556270"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+        <StackPanel Margin="0,0,0,12">
+            <TextBlock Text="API 设置" FontSize="23" FontWeight="SemiBold" Foreground="#304B63"/>
+            <TextBlock Style="{StaticResource Hint}" Margin="0,5,0,0"
+                       Text="配置服务并选择启用项。接口调用可能产生费用；图框截图只会在复查窗口中经人工选择后发送。"/>
+        </StackPanel>
+        <Grid x:Name="SettingsBody" Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="14"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Grid Grid.Column="0">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Text="服务配置" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <ListBox x:Name="ProfileList" Grid.Row="1" DisplayMemberPath="DisplayName"
+                         SelectionChanged="ProfileList_SelectionChanged" BorderBrush="#CFD8DF"/>
+                <WrapPanel Grid.Row="2" Margin="0,8,0,0">
+                    <Button Click="Add_Click">新增</Button>
+                    <Button x:Name="DeleteButton" Click="Delete_Click">删除</Button>
+                </WrapPanel>
+            </Grid>
+            <Border Grid.Column="2" Background="White" BorderBrush="#D8E0E5" BorderThickness="1" Padding="16">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="EditorPanel">
+                        <TextBlock x:Name="EditorTitle" FontSize="16" FontWeight="SemiBold" Foreground="#304B63" Margin="0,0,0,12"/>
+                        <TextBlock Text="配置名称"/>
+                        <TextBox x:Name="ProfileNameInput"/>
+                        <TextBlock Text="接口类型"/>
+                        <ComboBox x:Name="ProtocolInput" SelectedValuePath="Tag" Margin="0,3,0,10" Padding="5,4"
+                                  SelectionChanged="ProtocolInput_SelectionChanged">
+                            <ComboBoxItem Content="OpenAI Responses" Tag="responses"/>
+                            <ComboBoxItem Content="OpenAI 兼容 Chat Completions" Tag="chat_completions"/>
+                        </ComboBox>
+                        <TextBlock Text="API 基础地址（如 https://api.openai.com/v1）" TextWrapping="Wrap"/>
+                        <TextBox x:Name="BaseUrlInput" TextChanged="BaseUrlInput_TextChanged"/>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,-5,0,10"
+                                   Text="请填写服务商提供的基础地址，接口路径会自动追加；HTTP 仅限本机。请勿把密钥放入地址；改地址或类型时可输入新密钥，或明确清除旧密钥后匿名使用。"/>
+                        <TextBlock Text="模型"/>
+                        <TextBox x:Name="ModelInput"/>
+                        <TextBlock Text="API 密钥"/>
+                        <PasswordBox x:Name="KeyInput"/>
+                        <TextBlock x:Name="KeyStateText" Style="{StaticResource Hint}"/>
+                        <CheckBox x:Name="ClearKeyInput" Margin="0,8,0,12" Checked="ClearKeyInput_Checked"
+                                  Content="明确清除已保存的密钥（保存后生效）"/>
+                        <Separator Margin="0,2,0,12"/>
+                        <WrapPanel>
+                            <Button Click="Save_Click">保存配置</Button>
+                            <Button Style="{StaticResource PrimaryButton}" Click="SaveAndActivate_Click">保存并启用</Button>
+                            <Button x:Name="ActivateButton" Click="Activate_Click">启用所选</Button>
+                        </WrapPanel>
+                        <TextBlock Style="{StaticResource Hint}" Margin="0,2,0,7"
+                                   Text="连接测试仅向填写的服务地址发送少量文字，可能产生费用；不会发送图片。"/>
+                        <WrapPanel>
+                            <Button Click="Test_Click">测试连接</Button>
+                        </WrapPanel>
+                        <TextBlock x:Name="TestResultText" Style="{StaticResource Hint}"/>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </Grid>
+        <DockPanel Grid.Row="2" Margin="0,12,0,0" LastChildFill="True">
+            <Button x:Name="CancelOperationButton" DockPanel.Dock="Right" Click="CancelOperation_Click"
+                    Visibility="Collapsed" Margin="8,0,0,0">取消测试</Button>
+            <TextBlock x:Name="StatusText" Style="{StaticResource Hint}" VerticalAlignment="Center"/>
+        </DockPanel>
+    </Grid>
+</Window>
