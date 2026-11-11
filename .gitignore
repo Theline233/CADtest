@@ -1,0 +1,28 @@
+# Local customer data, outputs and secrets stay outside Git.
+/outputs/
+/inputs/
+/ui/
+/WebCAD-Preview/
+/.worktrees/
+.env
+.env.*
+*.pem
+*.key
+*.lic
+*.dwg
+*.dxf
+*.xlsx
+*.xls
+*.zip
+*.log
+*.jsonl
+*.lock
+!packages.lock.json
+__pycache__/
+*.pyc
+obj/
+/work/nuget/
+/work/cli-home/
+node_modules/
+*.pdb
+# Required native/review/projector runtime files are intentionally versioned.

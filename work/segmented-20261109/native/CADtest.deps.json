@@ -1,0 +1,41 @@
+{
+  "runtimeTarget": {
+    "name": ".NETCoreApp,Version=v10.0",
+    "signature": ""
+  },
+  "compilationOptions": {},
+  "targets": {
+    ".NETCoreApp,Version=v10.0": {
+      "CADtest/1.0.0": {
+        "dependencies": {
+          "ACadSharp": "3.8.35"
+        },
+        "runtime": {
+          "CADtest.dll": {}
+        }
+      },
+      "ACadSharp/3.8.35": {
+        "runtime": {
+          "lib/net10.0/ACadSharp.dll": {
+            "assemblyVersion": "3.8.35.0",
+            "fileVersion": "3.8.35.0"
+          }
+        }
+      }
+    }
+  },
+  "libraries": {
+    "CADtest/1.0.0": {
+      "type": "project",
+      "serviceable": false,
+      "sha512": ""
+    },
+    "ACadSharp/3.8.35": {
+      "type": "package",
+      "serviceable": true,
+      "sha512": "sha512-qZwwPGNHfKvNNDTbF6oX8bJqDLCbzY7zHhi5eOEmWGgHWiS1Rq14NHwB63cDdFIaB52FU2K//SCC+s8tDK4L7Q==",
+      "path": "acadsharp/3.8.35",
+      "hashPath": "acadsharp.3.8.35.nupkg.sha512"
+    }
+  }
+}

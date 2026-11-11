@@ -1,0 +1,625 @@
+{
+  "snapshot_date": "2026-11-11",
+  "source_commit": "016ef087f075c87802350cefbcf13be74c87a093",
+  "scope": "Current local recognition, projection, prediction, parallel coordination and review/export engine; no desktop UI or WebCAD preview.",
+  "files": [
+    {
+      "path": "NuGet.Config",
+      "source_git_blob": "caa46eb2a910b9598fd940237017905d02455bf0",
+      "sha256": "a2a5fdca3f837132103633cccee4e9d6604805efda3528148cd82d3bed64cee4",
+      "bytes": 289
+    },
+    {
+      "path": "global.json",
+      "source_git_blob": "6cc2f112552e3dc4f531faaffb163bb87b5adfa7",
+      "sha256": "6e853eb5f15422ea3922a644775f62347b3c019300f19a913661cec1560b7a34",
+      "bytes": 75
+    },
+    {
+      "path": "work/segmented-20261109/README.md",
+      "source_git_blob": "2db734a313e8d49a87ef1a98c686d8b9eb4d0268",
+      "sha256": "b2bdcdda75f9437368eec8e0c732d06706c127288afef4c0cbe11cf5a2174b4d",
+      "bytes": 8835
+    },
+    {
+      "path": "work/segmented-20261109/RunAccuracy.ps1",
+      "source_git_blob": "e55edff37e12d27fd8a7e720e1c41cf34212676e",
+      "sha256": "4ae49f18582e035e62c16775ea46243b3e1f2d220ec4ddb8435b6af1f84579de",
+      "bytes": 2509
+    },
+    {
+      "path": "work/segmented-20261109/audit_fields.py",
+      "source_git_blob": "5456b7e188a9805c39d8191c639e03371fa24268",
+      "sha256": "15d29bbede04d2e4fb51cd20591f114f031ed0d5d75501f44edf726c7271ed3d",
+      "bytes": 1752
+    },
+    {
+      "path": "work/segmented-20261109/audit_projection.py",
+      "source_git_blob": "86cc80c7b9a5bc07439b324f4372a0dcd6c2c740",
+      "sha256": "4f8a6b74f2762bbd3e82d4f402464694946fce7904a02f41efe275706be21ef9",
+      "bytes": 5943
+    },
+    {
+      "path": "work/segmented-20261109/audit_quantity_scopes.py",
+      "source_git_blob": "2dba6b0f2bae014828e125340e4ebfb152fee45d",
+      "sha256": "24fd8efdf615db338b1e054007fb0f91de98f1b28cdcb15d18f8207e986ad372",
+      "bytes": 1184
+    },
+    {
+      "path": "work/segmented-20261109/batch-fix-20261106/predict.mjs",
+      "source_git_blob": "8cbf0b7706a003ae892ed5b7c56e424c856c547c",
+      "sha256": "63e37a974d7d3faecaa83c6e5706b7c01ca29ed88e2a92ff84b87db81da2cab5",
+      "bytes": 13054
+    },
+    {
+      "path": "work/segmented-20261109/batch-fix-20261106/quantity.mjs",
+      "source_git_blob": "f2cc4066aa4eb35bdc06d31b6122611a8a059480",
+      "sha256": "326a1281be28dfd5fc069482e36cbae8feea0e4d7e5de8e4ddc8b4d64923aeb4",
+      "bytes": 14239
+    },
+    {
+      "path": "work/segmented-20261109/compare_versions.py",
+      "source_git_blob": "0ba8f8b0543fa04143ee09dee312cee963c348da",
+      "sha256": "d7cdcd12b49aaa7e6a08cad42b6ec009e75c3cfcfde6265ef59864b574983de6",
+      "bytes": 2744
+    },
+    {
+      "path": "work/segmented-20261109/extract-requirement-frames.mjs",
+      "source_git_blob": "a9f0fa6567dd66112b68b1af2ea93986997410ce",
+      "sha256": "c65d65dbf81ec2f3cb429920bc6e760f15ae0a59b7fc715da3ef1c2e6fa89d91",
+      "bytes": 28424
+    },
+    {
+      "path": "work/segmented-20261109/field-safety-tests.mjs",
+      "source_git_blob": "0922ead0445832c76fe8d17590876eed175d4041",
+      "sha256": "4e93b3933a7e842c0b91ab9771d19d082f3b7883573c5d038f9e0ec69ee0e8c4",
+      "bytes": 2716
+    },
+    {
+      "path": "work/segmented-20261109/final_acceptance.py",
+      "source_git_blob": "ca68cf0213e92c8c6ff7e4990ac69e01d2571260",
+      "sha256": "bc63a50dface0bef97bc1138243665955fba39057c7bcd13a782ac3388a78cd0",
+      "bytes": 5883
+    },
+    {
+      "path": "work/segmented-20261109/fixture-tests/FixtureTests.csproj",
+      "source_git_blob": "6ab65e7c7a6b0ae8c82f8d6106cc8645d411ce27",
+      "sha256": "983648baef5a4151f1a39a316d2a27abc97f0cca2c5160fdcf1dc47029ba8261",
+      "bytes": 301
+    },
+    {
+      "path": "work/segmented-20261109/fixture-tests/Program.cs",
+      "source_git_blob": "3469574522974c6ca06132580673343dbe3e1adb",
+      "sha256": "96e2848be780642be6d5f3496328d91f79fc49413c468c2fe9d516b7704d73d6",
+      "bytes": 2026
+    },
+    {
+      "path": "work/segmented-20261109/frame-duplicate-review-tests.mjs",
+      "source_git_blob": "e34c451902ab88584b9dcf065c2e3d7d37fbe20a",
+      "sha256": "95adf4611544ee13d27c9d33b79ac04005918453c29f6b9bf24e305d1897a8b5",
+      "bytes": 2514
+    },
+    {
+      "path": "work/segmented-20261109/frame-inline-expression-tests.mjs",
+      "source_git_blob": "28e25eb9cfa7e66776d47102c5ee024dd1c61b9f",
+      "sha256": "b48c008720a2a75de8e0cd831ec9b82511794742eae6dce42467c35d60d5c2bd",
+      "bytes": 2481
+    },
+    {
+      "path": "work/segmented-20261109/frame-legacy-tests.mjs",
+      "source_git_blob": "a6ea0cbf5ed43d159615f0ff1401642b5a65a2f4",
+      "sha256": "120ec22defd7fc5676d282b67132fde0a6f07f69b71e74f5216a207a3be19b88",
+      "bytes": 2910
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-font-attempt.py",
+      "source_git_blob": "eb32e7dca351e43a49458b4a514a6024950aa65f",
+      "sha256": "d4579aa1a2347178667d99b9f1ee90615c0b6e7067560f8b4da3a319e7fab549",
+      "bytes": 2609
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-legacy-tests.mjs",
+      "source_git_blob": "a052e944668c5644fca9d48f6822f4988c900e47",
+      "sha256": "ef7128942040a30c49d9f7f47fd83e07990cf81005b2328dfff7df6f9ca60df4",
+      "bytes": 2908
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-matrix.mjs",
+      "source_git_blob": "0a4e4577c389e6226f46d679da018ed8c133908c",
+      "sha256": "ee7d926fcf7bf1c1dc8468f195c872e4fdaf6c5eb2dee583ac60761a9b2c995a",
+      "bytes": 6683
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-replay.mjs",
+      "source_git_blob": "2ebd2c60d472d9b703432772ae64e8d8bec0d48a",
+      "sha256": "f750aa9a240a9934c7a7f3999c576fb89fb7adc2071a1c6caf5401bb0ac6d02d",
+      "bytes": 5293
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-tests.mjs",
+      "source_git_blob": "95ffe6a907697f24055d2c01ec008cb15818e436",
+      "sha256": "b9afa5d9fa622fc372b07844258abfd1fc0391def4d588534e78735b2a3d62f7",
+      "bytes": 1738
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-visibility-attempt.py",
+      "source_git_blob": "2b852758f2cf75c711ae5a3c8ef6cc1d9dfae1c5",
+      "sha256": "382e78dc2479937e48b9b8ad70183101d31264f84ecf1991d2b4f657f16f48de",
+      "bytes": 3396
+    },
+    {
+      "path": "work/segmented-20261109/frame-n03-visual.py",
+      "source_git_blob": "22e6072bad582750e432d1e406f41eac1a4af201",
+      "sha256": "b512bddcd113ea7c6e2c144d5482c6685ef8b8458f9bbf437c6df0a764bb4d47",
+      "bytes": 2242
+    },
+    {
+      "path": "work/segmented-20261109/frame-ownership-tests.mjs",
+      "source_git_blob": "1a5201697796115b3b3356a90cd631288dc4e553",
+      "sha256": "3be245268cb667ba223f0f6f9f54ee9cc438d8894835e6e39fb47448a6965616",
+      "bytes": 2058
+    },
+    {
+      "path": "work/segmented-20261109/frame-replay.mjs",
+      "source_git_blob": "e84f20e65969e1050db5594710329860eb1ece98",
+      "sha256": "dbd728e2e419a6ea9e8d61f17847241949cebbb3f08d3e93b5b35bb990a2c3d1",
+      "bytes": 5840
+    },
+    {
+      "path": "work/segmented-20261109/frame-review-fields-tests.mjs",
+      "source_git_blob": "8706f60091eb1f448c91c916ed62e5d5714138f3",
+      "sha256": "69dd742f6b70ae382751502152b1ffa29b61d790d984387d6c8e46b350604d7d",
+      "bytes": 3189
+    },
+    {
+      "path": "work/segmented-20261109/frame-review-text-tests.mjs",
+      "source_git_blob": "19d7da6687fc2c13c3a4824e1373101901c44999",
+      "sha256": "7c4d2203470dc65631baccccc38fde0727093648f089e191649901fdfbbea9c2",
+      "bytes": 2582
+    },
+    {
+      "path": "work/segmented-20261109/frame-s07-audit.mjs",
+      "source_git_blob": "daf0cb3398fa21d389ba42593fd565b9b2e423ba",
+      "sha256": "e925cc51966549ee8a98279543d30b053ab9d59acf7c4b303538d82e0da335d8",
+      "bytes": 2452
+    },
+    {
+      "path": "work/segmented-20261109/frame-subpart-review-tests.mjs",
+      "source_git_blob": "02ae3f30d49aae01653268234d40e7e2f7c3fe10",
+      "sha256": "6edcdf204ac46bcee6f951d6c2c506a93614556221f32696b30de2f247ac8c25",
+      "bytes": 2093
+    },
+    {
+      "path": "work/segmented-20261109/frame-tests.mjs",
+      "source_git_blob": "f47750303705fcf90a2f44d7ef8276ce595f24ce",
+      "sha256": "be9fb8902c00f4b982fb6e257925c3c05fb7259275be69e2b0f140d8c83c8b8a",
+      "bytes": 2790
+    },
+    {
+      "path": "work/segmented-20261109/frame-title-label-tests.mjs",
+      "source_git_blob": "0a6c1600e15232aa7c83b470bb3d413e45e6af35",
+      "sha256": "726f5a42b4f6cefd966ad4d4de1b44f71126775e92c72996cd4fcedc709b3e2a",
+      "bytes": 2494
+    },
+    {
+      "path": "work/segmented-20261109/freeze_code.py",
+      "source_git_blob": "38db58d1c1e2a0723cb6542ce284487955915655",
+      "sha256": "972e91ba0ef95a449915ddefb8e29a13d18f35ca8ce312702e757da4aa5286a4",
+      "bytes": 1005
+    },
+    {
+      "path": "work/segmented-20261109/freeze_code_v2.py",
+      "source_git_blob": "b7c2d41bd10cd6398864170a368ed5e5a3e09063",
+      "sha256": "83492f69d9bb4401b9d89794a1e01a4f5e944962ca61e28a8be016532b594cf8",
+      "bytes": 1365
+    },
+    {
+      "path": "work/segmented-20261109/freeze_holdout.py",
+      "source_git_blob": "1ee966b1824b3356156306c112009ab266a53fb8",
+      "sha256": "1e6b06260d24e9b83ba7a3eb53bf54c2fefeda7020f61eae674d468273ce8d51",
+      "bytes": 2827
+    },
+    {
+      "path": "work/segmented-20261109/freeze_holdout2.py",
+      "source_git_blob": "0d1df176ff0461a17e4a959a6e3bb0630acea411",
+      "sha256": "58f8e0aa057e54a44f2f78cbf69b489a1b0d8b6bb7e6d724ab9d2a216d64a9a4",
+      "bytes": 2964
+    },
+    {
+      "path": "work/segmented-20261109/independent_projection_audit.py",
+      "source_git_blob": "8e3db6756fd8b725c4abab1cb4863a0c3b176365",
+      "sha256": "4c67ba8af1d4acdf9616f8af7fff4fd5dee60617cb30a59091091da74dea2905",
+      "bytes": 25062
+    },
+    {
+      "path": "work/segmented-20261109/integration_guard_tests.py",
+      "source_git_blob": "6e46e89803855a36cd683c2ad2a896d50524b30c",
+      "sha256": "1e6083a02cde5eede2eae3e216424be45ee92ab8c1174f01817b19d3380f50a7",
+      "bytes": 2526
+    },
+    {
+      "path": "work/segmented-20261109/native-source/CADtest.csproj",
+      "source_git_blob": "5e90d6c16bc7fc4ed0f9d5bde2ad5f4adaecea0a",
+      "sha256": "b929ce962e86b54334cd1627dd1774c9f7fb568b1225b825d5af81d40c0c78f5",
+      "bytes": 397
+    },
+    {
+      "path": "work/segmented-20261109/native-source/CadPlacement.cs",
+      "source_git_blob": "2db097bfe8728261f791e56ef262c336ed97c7a2",
+      "sha256": "db313e16177d09548a8094bbb5dbc08fa65e2e3a1c1998712e9724f7364269d6",
+      "bytes": 1749
+    },
+    {
+      "path": "work/segmented-20261109/native-source/FiniteDoubleConverter.cs",
+      "source_git_blob": "597121fbf17d11ceabb973538840f15f9b4ae9d6",
+      "sha256": "a7445f9fa41212cdea01016080fba8f0a8eca1c332ceea7507bfe0f1a53056aa",
+      "bytes": 733
+    },
+    {
+      "path": "work/segmented-20261109/native-source/Program.cs",
+      "source_git_blob": "ee26fe0ed2301910d7c84d77a4d259dc5d78cfa6",
+      "sha256": "f66065ce725030fc670017a05c8cc06ebe7bea2ca2d670da8602078e8a367943",
+      "bytes": 16552
+    },
+    {
+      "path": "work/segmented-20261109/native-source/SafeCadText.cs",
+      "source_git_blob": "f35ced92eac9f8f970ebfcc35200ca673a31ad2c",
+      "sha256": "2ed2e82d0976108f322428ce62613ef63517c4c2be41c95f1aff5666507df690",
+      "bytes": 8517
+    },
+    {
+      "path": "work/segmented-20261109/native-source/packages.lock.json",
+      "source_git_blob": "c0bf65b47211581d110bb2e41e4dd5b6fc14c6e1",
+      "sha256": "6f386de49c66def4dcf5102c62f0632f706a8039c9e17dc8fa8eb3cab894a85d",
+      "bytes": 312
+    },
+    {
+      "path": "work/segmented-20261109/native/ACadSharp.dll",
+      "source_git_blob": "8fe27e0d9acdbfc6da693162d8d0fe61da18dfca",
+      "sha256": "3bc9666cb70c0ae974dee18fc3a0273756e60700e8aba9d59607cce28f1b004a",
+      "bytes": 1485312
+    },
+    {
+      "path": "work/segmented-20261109/native/CADtest.deps.json",
+      "source_git_blob": "ed6e8b08da1574d6add7f84f6712c7c4abd5ce77",
+      "sha256": "59a3339cb618a3ed11f98c9239c3c8bfd148beeb0facb46acc1871a24d1f420f",
+      "bytes": 988
+    },
+    {
+      "path": "work/segmented-20261109/native/CADtest.dll",
+      "source_git_blob": "fb3d4b2a82d037c5bd907c2d928be8015e5b2f92",
+      "sha256": "8ff728aff587ab8a339e866cf88c2be5424e6f90df3d3d5bad680c0af361c961",
+      "bytes": 84480
+    },
+    {
+      "path": "work/segmented-20261109/native/CADtest.exe",
+      "source_git_blob": "713526963fba905775e500d496bd2c14e17bc378",
+      "sha256": "0fcd9f2950fd1636403f9e358bcff5cf493798cf741b7e4f70f218d2c316252e",
+      "bytes": 162304
+    },
+    {
+      "path": "work/segmented-20261109/native/CADtest.runtimeconfig.json",
+      "source_git_blob": "7cd647c5996625c327ab71308e5b1eb03a859dfa",
+      "sha256": "256dda2706e1151bb95987b6b5be610bf68d64e058285b19e7e958222fc90414",
+      "bytes": 270
+    },
+    {
+      "path": "work/segmented-20261109/native_visual.py",
+      "source_git_blob": "ced5bcfe2976f5a66d249310de2e13ead7d712c3",
+      "sha256": "345d9cc4dcba4716fb061c71165cbdcaec132ad7d26878a2783705d97d1f2cd4",
+      "bytes": 2821
+    },
+    {
+      "path": "work/segmented-20261109/native_visual_s08.py",
+      "source_git_blob": "6466094c5c267dd0c38256deb4fa2abc27840b70",
+      "sha256": "2f83b2d123e6c436a20b8dd22d01eebcfe069f0baad1e0dd52937606a755b658",
+      "bytes": 2844
+    },
+    {
+      "path": "work/segmented-20261109/node-gate.mjs",
+      "source_git_blob": "3e62c5347a810b49e2e8c88b92562f8fe1063415",
+      "sha256": "3de57ad231716f96e50d090f4781076c1fb639cc1458ab8711a61d70089f346d",
+      "bytes": 537
+    },
+    {
+      "path": "work/segmented-20261109/parallel_runner.py",
+      "source_git_blob": "850c38a656f4d6df1e74065314fbc22cea016a41",
+      "sha256": "d41d3af41b77cf650e07572695c8c20f753f1ff53f6b94b9d4fe66fe772be4a9",
+      "bytes": 25421
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment-inventory.mjs",
+      "source_git_blob": "68c796d247774d6deb8b2e5f254714f7251b2d6d",
+      "sha256": "31974b21fd58a59aff9ae5ce82fbdf8ce0d48a495a9f18c7d97367872896ef72",
+      "bytes": 3293
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment-legacy-tests.mjs",
+      "source_git_blob": "bc768a873f6d06ece54c8eb30a649adf30adb5e5",
+      "sha256": "8a6c2f4548947d5834a406db454ffe915ac06f42732e64a0938a762d1af7b2de",
+      "bytes": 2259
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment-replay.mjs",
+      "source_git_blob": "4dace7d52c5151799022ec03aec1fadd06dfda6a",
+      "sha256": "60338d999d230af797117005454609afdca21361a00a61564440fc1e9cac8817",
+      "bytes": 8562
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment-tests.mjs",
+      "source_git_blob": "9a9adbdb20fc055532998594110b5e49e95528c8",
+      "sha256": "0c5a9bc45e4c1a291774b6c781dd46a50d94f6ffa1f1275017da81e0d98d17ca",
+      "bytes": 7655
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment-verify.mjs",
+      "source_git_blob": "d4a8714f0497706481d2e5be8223cafd1b4b4765",
+      "sha256": "20d819354a6b8d25986ca116c6885cfc9f955175c296170b3503f10db784dada",
+      "bytes": 6210
+    },
+    {
+      "path": "work/segmented-20261109/polish-20261106/treatment.mjs",
+      "source_git_blob": "143914b9f101c2b5f47e4a71b9c1ffac9b43f870",
+      "sha256": "712ece7af871cc4cc44f6314a3264a6b5a1a7aa893cc8d12c66678d2365b7d5f",
+      "bytes": 12287
+    },
+    {
+      "path": "work/segmented-20261109/prepare_review.py",
+      "source_git_blob": "92a85df4aad75b0b3cbaf9531627fe28a71461f9",
+      "sha256": "1d65ba6074fa7bc72217b2be9b2deec4f7b320380fdd37cef9f86d6c6b70ec9f",
+      "bytes": 20047
+    },
+    {
+      "path": "work/segmented-20261109/projection_boundary_tests.py",
+      "source_git_blob": "350f3014d67ff9ba61e847eb9b292bf4c5e5b4b5",
+      "sha256": "9f204c0d185724b3e796792f075e577c871af46f6b0884766dbb99477db25324",
+      "bytes": 4784
+    },
+    {
+      "path": "work/segmented-20261109/projector/Program.cs",
+      "source_git_blob": "d531ffcafe29c00dea75132ebf3d53bd3a068af1",
+      "sha256": "1a5d4c46923fd893250fd75aa566d487b39477bd516a51dee73fa1a874b021f6",
+      "bytes": 19388
+    },
+    {
+      "path": "work/segmented-20261109/projector/Projector.csproj",
+      "source_git_blob": "e32352e44fe881f9b817722925bb42845b330936",
+      "sha256": "ba99d448cbe9e097eea1168349e2f5c04d132a39c5547e1ca558f62dd21be450",
+      "bytes": 297
+    },
+    {
+      "path": "work/segmented-20261109/projector/bin/Release/net10.0/Projector.deps.json",
+      "source_git_blob": "c53d13326a33ab60a5b0482ab3f4de4e79d78a38",
+      "sha256": "f4a1162f5e87d158c69146e4ab59529c3d92ebc541f66cadfea6b13ecd4cc1e7",
+      "bytes": 421
+    },
+    {
+      "path": "work/segmented-20261109/projector/bin/Release/net10.0/Projector.dll",
+      "source_git_blob": "cff2c984153b5c4aefc8c789ca7d94ed722f2f64",
+      "sha256": "4a121cf5f61d065ee1618a803ac2ec503b3796f2f16f4d8bb91a715573190fca",
+      "bytes": 26624
+    },
+    {
+      "path": "work/segmented-20261109/projector/bin/Release/net10.0/Projector.exe",
+      "source_git_blob": "c18c54cbc96e2ec06587dc455e2495c2f4cfd8eb",
+      "sha256": "e842d8ea4c736b90bf3222a7e7231d090a0ac03e589d375f8fddb5aa4302f703",
+      "bytes": 162304
+    },
+    {
+      "path": "work/segmented-20261109/projector/bin/Release/net10.0/Projector.runtimeconfig.json",
+      "source_git_blob": "8bef1c59e42609e3eb4d4ddd858216ecabe4f5d5",
+      "sha256": "a3f0850ba7c996d307396ff1713d0815b23c2d44d5aa6e489ca4497e2b711393",
+      "bytes": 390
+    },
+    {
+      "path": "work/segmented-20261109/python-gate.py",
+      "source_git_blob": "b3396da7a828260c7832b9777d6d4ef980d7796b",
+      "sha256": "6e52f3d862b82f0bbe6deefbe04b5ce86fbf3d21f3a605b72ae367e3a1b1724e",
+      "bytes": 266
+    },
+    {
+      "path": "work/segmented-20261109/red_repro.py",
+      "source_git_blob": "527d96f3d53c935b2705595873c7cfb3d6fc8e0b",
+      "sha256": "b65cf9f686025ab36ea00655a3fd34be09580bfb663271792471ad05ed7fcd31",
+      "bytes": 1233
+    },
+    {
+      "path": "work/segmented-20261109/render_holdout_titles.py",
+      "source_git_blob": "ed7e37fe1b5b31e9536fe451e9cba72e3a77762c",
+      "sha256": "ba428cf7e4161ca7afabc003b7f1d4d3180190b5a8fcdbefa1285aaa04b2413f",
+      "bytes": 4763
+    },
+    {
+      "path": "work/segmented-20261109/replay_development.py",
+      "source_git_blob": "c6cb3cd32ef41f21a5818bb9f3f2af8c11aad67a",
+      "sha256": "cfc9b63d280d74aafb3b86e126cfe38c3c042b751b2b880786fc4d11b0698675",
+      "bytes": 2394
+    },
+    {
+      "path": "work/segmented-20261109/resource_guard_tests.py",
+      "source_git_blob": "996199f57060704b002d0f4d5067d1ff980f04bb",
+      "sha256": "54e3b6579b99a7e8df81aa09077c8d6e798d95a4348fd2956f48fd30ab02ad06",
+      "bytes": 43420
+    },
+    {
+      "path": "work/segmented-20261109/review-native/CadReviewWorkflow.deps.json",
+      "source_git_blob": "c53ed0d63bb0fb9b7046d39995c38c4223d41ae3",
+      "sha256": "46e638de16a1831d8869f7d0d16014f8acc689161468ec479eee6ae9130702d2",
+      "bytes": 5278
+    },
+    {
+      "path": "work/segmented-20261109/review-native/CadReviewWorkflow.dll",
+      "source_git_blob": "80df1b26c2f0141bf057c008233b99c72a0eee9c",
+      "sha256": "674833ccd3a781e2bc3904e430d1cc9353783f738f8b18fd8a4994d03b91cc5f",
+      "bytes": 66560
+    },
+    {
+      "path": "work/segmented-20261109/review-native/CadReviewWorkflow.exe",
+      "source_git_blob": "7e1d16cab7cae90037c0a7f4e00dd3e11f398cbb",
+      "sha256": "c439250fe6e5f7f3f3aee35bff7a05543f831446f53b52b1e3976d6f5a409ab5",
+      "bytes": 162304
+    },
+    {
+      "path": "work/segmented-20261109/review-native/CadReviewWorkflow.runtimeconfig.json",
+      "source_git_blob": "ced528343486b29de8416066066aa56dc18f05c9",
+      "sha256": "c230a317a54dd960bcbeb5f347f52e18dc665a26f7efda2159fced9a5ac7e097",
+      "bytes": 342
+    },
+    {
+      "path": "work/segmented-20261109/review-native/ClosedXML.Parser.dll",
+      "source_git_blob": "52ce71a9aa0660fdc3ef40611de3edd8eabd74d2",
+      "sha256": "8d36e75b9b238e57ddd4122d0e2f6105acdc873bce2f297277ae0a25ddf610eb",
+      "bytes": 192000
+    },
+    {
+      "path": "work/segmented-20261109/review-native/ClosedXML.dll",
+      "source_git_blob": "c4c18ca2a84f5d89a342b3d7c7213cc511b0db69",
+      "sha256": "d20270efad0d3f5a17ed35c6fe512c2071b1ed40a57ce91199897f41760ec1bc",
+      "bytes": 1692160
+    },
+    {
+      "path": "work/segmented-20261109/review-native/DocumentFormat.OpenXml.Framework.dll",
+      "source_git_blob": "895c615c5e150f48410ed76776dd361e04dd49f4",
+      "sha256": "ddae1f34e78971a731193e459c3aed54314f93a54d51c2457e12ccc169bf5663",
+      "bytes": 471152
+    },
+    {
+      "path": "work/segmented-20261109/review-native/DocumentFormat.OpenXml.dll",
+      "source_git_blob": "dbc29d1748341de8c912c4fd1cc0afa6e8f50fa8",
+      "sha256": "5a0c237a7467dde85bce402d124b7a07777531607837eb59ee62a9a79905ff43",
+      "bytes": 6349424
+    },
+    {
+      "path": "work/segmented-20261109/review-native/ExcelNumberFormat.dll",
+      "source_git_blob": "aaf7bf8d501fcfcdf05a088202f0a3df91374111",
+      "sha256": "d7c45b8e4e1027831e2fc8cdf941faf51d28a66feacfcaaa737da73262e7b507",
+      "bytes": 30720
+    },
+    {
+      "path": "work/segmented-20261109/review-native/RBush.dll",
+      "source_git_blob": "c1cec38a62e0228402621579ee8e49d7c06753c9",
+      "sha256": "047e48ab058a783a1d0021ede9ac238e158ed43fa2368a15fd4ccd8f920ab6a1",
+      "bytes": 34816
+    },
+    {
+      "path": "work/segmented-20261109/review-native/SixLabors.Fonts.dll",
+      "source_git_blob": "281d8a71dadf46fe48bee6d469abcc3ca4f795f2",
+      "sha256": "e1e2f107e7c78fb859f1b23383107a125acd8b3a7470140850daa6f6f6c45d9f",
+      "bytes": 1135616
+    },
+    {
+      "path": "work/segmented-20261109/review-native/System.IO.Packaging.dll",
+      "source_git_blob": "eb95db7c3c9b988f691c5959044259a5ceaf9270",
+      "sha256": "12ddc8bff279fad856551a74894dc52b80fa437d5d2b32722e70ae6899217b7c",
+      "bytes": 142136
+    },
+    {
+      "path": "work/segmented-20261109/review-source/CadReviewWorkflow.csproj",
+      "source_git_blob": "06e6ce10b7ef4b5c843651deadeafa9b6a27bd0c",
+      "sha256": "47813a91c0febcbec3864a39dcbc864fa14e48c111f7db8fea68a5ac4229994a",
+      "bytes": 382
+    },
+    {
+      "path": "work/segmented-20261109/review-source/Models.cs",
+      "source_git_blob": "8d866afa60cf23fef4d43c942f273604eec21d6b",
+      "sha256": "4264bf79fc70399345998668d639c1f60a40e088d7c7f1d9a6506318cd2704a6",
+      "bytes": 2551
+    },
+    {
+      "path": "work/segmented-20261109/review-source/Program.cs",
+      "source_git_blob": "f9275346661e73048361369aa5cded5189c2e8db",
+      "sha256": "b91b15e2c1e5862608af52918a2cfdebd53f67db00dd6cef0ab17c426ef86c9e",
+      "bytes": 1827
+    },
+    {
+      "path": "work/segmented-20261109/review-source/ReviewWorkbooks.cs",
+      "source_git_blob": "7ee743ab876c2afa8ddcb84964196193af313593",
+      "sha256": "29dbbc53027f725269758c51599415e671c39160416576b779c763771fd4798b",
+      "bytes": 22863
+    },
+    {
+      "path": "work/segmented-20261109/review-source/packages.lock.json",
+      "source_git_blob": "bcdb3ff588fde23adb5383232df938c6dcb8960a",
+      "sha256": "a183d5e95c095faac08ba8cf5994f1f92f516be8fb05e7ddfebeafcb4ae9d36a",
+      "bytes": 2280
+    },
+    {
+      "path": "work/segmented-20261109/review_data_tests.py",
+      "source_git_blob": "e9d0d440d767a8fee6c87892e9e87c94c5b846f0",
+      "sha256": "ff4169ee978c91ef48a2a3d426e6257b524b37305a29da9e3810c9ba328c0838",
+      "bytes": 2829
+    },
+    {
+      "path": "work/segmented-20261109/review_guard.py",
+      "source_git_blob": "cf75df1d3c19d385dc006a74b8f5adbad8ec4ccd",
+      "sha256": "4dbd052bf74ba387937e90de62a7575e1709d9c9e9504524378c6cb631892664",
+      "bytes": 3243
+    },
+    {
+      "path": "work/segmented-20261109/runner.py",
+      "source_git_blob": "15595e49d4f232c1311e696a4ccb1ec9e2edb081",
+      "sha256": "18a107b6f52898ca4ba1410c51d11326f7b0e604d67b2c3d3782036a3f4697c0",
+      "bytes": 42088
+    },
+    {
+      "path": "work/segmented-20261109/spotcheck_visual.py",
+      "source_git_blob": "8d1766aee1eae1b34d0a1c03dc029d3f95c4634a",
+      "sha256": "af6ba5b22d7f14acc8f538d26ade929c6867510a98e6e1f9bb9c07b69fbae5d3",
+      "bytes": 2929
+    },
+    {
+      "path": "work/segmented-20261109/verify_final_regression.py",
+      "source_git_blob": "bff5841555bf7b4b12e6ee74f1034107aa2e1890",
+      "sha256": "d0b219d219e35a1fd6334d08ce18461cfaafadf2fd2f25fd1733c9a42336712a",
+      "bytes": 1749
+    },
+    {
+      "path": "work/segmented-20261109/verify_large_review_guarded.py",
+      "source_git_blob": "d7d6dce8c50a7e67b11ef5435a4128eff23b5a3a",
+      "sha256": "ccf5fc0368ec93718988c709d6391f890d908ed25e425e68bcdd624dadf23a09",
+      "bytes": 1500
+    },
+    {
+      "path": "work/segmented-20261109/verify_layout_guarded.py",
+      "source_git_blob": "b2f23c6037f4a52f63ad42e56210fcbebe41de12",
+      "sha256": "b07f872cabe8a0df6795d50c5cb46cc6e01127778b92ec70f58ae8880e20d9f1",
+      "bytes": 1229
+    },
+    {
+      "path": "work/segmented-20261109/verify_projection_guarded.py",
+      "source_git_blob": "7488acac0e1430e49151d58d18ec05e0aef964b8",
+      "sha256": "d380f960460754e31c092f869e4b40afed2929b5fb6a0707e4aa59b823a17c2d",
+      "bytes": 1857
+    },
+    {
+      "path": "work/segmented-20261109/verify_regression.py",
+      "source_git_blob": "c3dd2f325f0b040b9699b42291eb6640caf9fd5a",
+      "sha256": "c5cb0963854a01941c267ed6bb78408b884f1f9e9e717beba7d6c2f0ab7c7531",
+      "bytes": 1692
+    },
+    {
+      "path": "work/segmented-20261109/verify_review.py",
+      "source_git_blob": "f0deae93fdb725482dd09a3ee91e0c64d8fd7d7f",
+      "sha256": "a1e8946199b7384a5e2e3543a59c84dacce7345073624351477f89f96ef72d29",
+      "bytes": 3748
+    },
+    {
+      "path": "work/segmented-20261109/verify_review_layout.py",
+      "source_git_blob": "d7ec96e32075cacbe838207138b912e37b45a676",
+      "sha256": "af35e854b7d8cced1535a670c6001f691874b1fe9e58d3e5f867f0d841ed6038",
+      "bytes": 2551
+    },
+    {
+      "path": "work/segmented-20261109/verify_synthetic_export.py",
+      "source_git_blob": "3ab861d5ad26719c623170adcf11723cf3a39848",
+      "sha256": "7a0ab29ba355dda7caa09103df67bf00b47eeef89e97813421ba9df557fbc242",
+      "bytes": 2419
+    },
+    {
+      "path": "work/segmented-20261109/visualize_review.ps1",
+      "source_git_blob": "f0aebcfd67b8914111b74766877970d985fc2623",
+      "sha256": "eeadb476abaccf694b7fc7b89da374d4281ce3645e527246be97e320f9a31fc6",
+      "bytes": 2957
+    }
+  ]
+}
