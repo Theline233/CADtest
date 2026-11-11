@@ -104,12 +104,14 @@ class Portability(unittest.TestCase):
         helper=self.runner.APP_REL/'workspace_paths.py'
         self.assertIn(str(helper),manifest)
         probe=self.root/'probe.py'
-        probe.write_text('from workspace_paths import workspace_root\nprint(workspace_root())\n',encoding='utf8')
+        probe.write_text('import workspace_paths,json\nprint(json.dumps({"root":str(workspace_paths.workspace_root()),"helper":workspace_paths.__file__}))\n',encoding='utf8')
         # The real frozen gate sets sys.path to the executed script's directory.
         target=frozen/self.runner.APP_REL/'probe.py'
         target.write_bytes(probe.read_bytes())
         logs=self.guarded([sys.executable,'-B',frozen/self.runner.PYTHON_GATE,target])
-        self.assertEqual((logs/'stage.stdout.log').read_text(encoding='utf8').strip(),str(self.root.resolve()))
+        observed=json.loads((logs/'stage.stdout.log').read_text(encoding='utf8'))
+        self.assertEqual(observed['root'],str(self.root.resolve()))
+        self.assertEqual(Path(observed['helper']).resolve(),(frozen/helper).resolve())
         self.runner.verify_frozen(frozen,manifest)
         target_helper=frozen/helper
         target_helper.write_bytes(target_helper.read_bytes()+b'\n# tampered\n')

@@ -53,11 +53,22 @@ public static class Engine
         return python == null || node == null ? null : (python, node);
     }
 
+    internal static bool HasBundledRuntime =>
+        File.Exists(Path.Combine(Root, @"runtime\python\python.exe")) &&
+        File.Exists(Path.Combine(Root, @"runtime\node\node.exe"));
+
     internal static void ConfigureChild(ProcessStartInfo start)
     {
         start.Environment["CADTEST_ROOT"] = Root;
         start.Environment["PYTHONUTF8"] = "1";
         start.Environment["PYTHONIOENCODING"] = "utf-8";
+        var dotnet = Path.Combine(Root, @"runtime\dotnet");
+        if (Directory.Exists(Path.Combine(dotnet, "shared")))
+        {
+            start.Environment["DOTNET_ROOT"] = dotnet;
+            start.Environment["DOTNET_ROOT_X64"] = dotnet;
+            start.Environment["DOTNET_MULTILEVEL_LOOKUP"] = "0";
+        }
     }
 
     /// <summary>分段任务证据和保护组件完整性分别判断；不完整时禁止退回旧引擎。</summary>
@@ -303,7 +314,8 @@ public static class Engine
         var python = FindPython() ?? throw new FileNotFoundException("找不到 Python。请安装 Python 3.11+ 或设置 CADTEST_PYTHON。");
         var guarded = new ProcessStartInfo(python) { WorkingDirectory = SegmentedDir };
         guarded.Environment["PYTHONIOENCODING"] = "utf-8";
-        foreach (var a in new[] { "-B", "-X", "utf8", SegmentedGuard, mode, "--manifest", manifest, "--review", review }.Concat(extra))
+        var limits = HasBundledRuntime ? ResourceAuto.GuardArgs(ResourceAuto.Current()) : [];
+        foreach (var a in new[] { "-B", "-X", "utf8", SegmentedGuard, mode, "--manifest", manifest, "--review", review }.Concat(extra).Concat(limits))
             guarded.ArgumentList.Add(a);
         return guarded;
     }
@@ -385,15 +397,35 @@ public static class Engine
     public static async Task<RecognizeOutcome> RecognizeAsync(IReadOnlyList<string> drawings, string outputDir,
         Action<string> log, CancellationToken ct)
     {
-        var shell = FindShell();
-        if (shell == null) return new(false, "", "找不到 PowerShell 7。请安装 PowerShell 7 或设置 CADTEST_POWERSHELL。");
-        var script = RecognizeScript;
-        if (script == null) return new(false, "", "找不到识别入口脚本：" + SegmentedScript);
         var runtime = FindParallelRuntime();
         if (runtime == null) return new(false, "", "找不到 Python 或 Node.js。请安装运行时并加入 PATH，或设置 CADTEST_PYTHON / CADTEST_NODE。");
         var python = runtime.Value.Python;
         var node = runtime.Value.Node;
-        var run = await RunLinesAsync(RecognitionCommand(shell, script, drawings, outputDir, python, node), log, ct);
+        RunOutcome run;
+        if (HasBundledRuntime)
+        {
+            string full = Path.GetFullPath(outputDir);
+            string prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputsRoot)) + Path.DirectorySeparatorChar;
+            if (!full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) || Directory.Exists(full) || File.Exists(full))
+                return new(false, "", "输出目录必须是 outputs 下尚不存在的新目录。");
+            var plan = ResourceAuto.Current();
+            log(plan.Describe());
+            if (plan.Warning != null) log(plan.Warning);
+            var direct = new ProcessStartInfo(python);
+            foreach (string value in new[] { "-B", "-X", "utf8", Path.Combine(SegmentedDir, "runner.py"),
+                "--output", Path.Combine(full, "recognition"), "--node", node, "--prepare-review" }
+                .Concat(ResourceAuto.RecognizeArgs(plan)).Concat(new[] { "--drawing" }).Concat(drawings))
+                direct.ArgumentList.Add(value);
+            run = await RunLinesAsync(direct, log, ct);
+        }
+        else
+        {
+            var shell = FindShell();
+            if (shell == null) return new(false, "", "找不到 PowerShell 7。请安装 PowerShell 7 或设置 CADTEST_POWERSHELL。");
+            var script = RecognizeScript;
+            if (script == null) return new(false, "", "找不到识别入口脚本：" + SegmentedScript);
+            run = await RunLinesAsync(RecognitionCommand(shell, script, drawings, outputDir, python, node), log, ct);
+        }
         var review = Path.Combine(outputDir, "review");
         if (run.ExitCode == 0 && File.Exists(Path.Combine(review, "source.json")) && File.Exists(Path.Combine(review, "图纸复核.xlsx")))
             return new(true, review, "识别完成");
@@ -402,6 +434,7 @@ public static class Engine
 
     static string Diagnose(string outputDir, RunOutcome run)
     {
+        if (HasBundledRuntime && ResourceAuto.ExplainFailure(outputDir) is { } friendly) return friendly;
         var sb = new StringBuilder();
         foreach (var name in new[] { "admission.json", "batch-status.json", "review-status.json" })
         {

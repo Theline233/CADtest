@@ -34,6 +34,17 @@ public static class DesktopIntegrationSelfTest
         MainWindow? window = null;
         try
         {
+            if (Engine.HasBundledRuntime)
+            {
+                var runtimeLogs=Path.Combine(output,"runtime-probe");Directory.CreateDirectory(runtimeLogs);
+                const string probe="import runner,json,sys;from pathlib import Path;out=Path(sys.argv[1]);\nwith runner.workspace_lock():\n r=runner.command([runner.APP/'review-native/CadReviewWorkflow.exe','runtime-info','--wait-for-go'],out,'runtime',runner.Limits(memory_mib=512,cpu_percent=25),wait_for_go=True)\nprint(json.dumps({'python':sys.executable,'result':r['status'],'backend':json.loads((out/'runtime.stdout.log').read_text(encoding='utf-8-sig'))}))";
+                var runtime=await Engine.RunAsync(Engine.FindPython()!,new[]{"-B","-X","utf8","-c",probe,runtimeLogs},null,CancellationToken.None);
+                Check("packaged runtime probe completed",runtime.ExitCode==0);
+                using var info=JsonDocument.Parse(runtime.StdOut);
+                Check("packaged Python is used",Path.GetFullPath(info.RootElement.GetProperty("python").GetString()!)==Path.Combine(Engine.Root,@"runtime\python\python.exe"));
+                var directory=Path.GetFullPath(info.RootElement.GetProperty("backend").GetProperty("runtime_directory").GetString()!);
+                Check("backend uses packaged NET runtime",directory.StartsWith(Path.Combine(Engine.Root,@"runtime\dotnet\shared")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase));
+            }
             window = new MainWindow(false, (text,title,_,_) => { dialogs.Add(title+": "+text); return MessageBoxResult.No; }, null,
                 (_,_,_,_) => { confirmations++; return confirm; })
             { Left=-20000, Top=-20000, ShowActivated=false, ShowInTaskbar=false, WindowStartupLocation=WindowStartupLocation.Manual };
