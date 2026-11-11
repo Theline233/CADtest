@@ -1,2 +1,4 @@
 # Preserve the byte-level extractor contract and source snapshot hashes.
 * -text
+# Preserve upstream license text verbatim, including its original whitespace.
+packaging/licenses/** -whitespace
