@@ -1,8 +1,9 @@
 """Parameter-driven review dataset. CAD values only; reference differences remain separate notes."""
 import argparse,hashlib,json,math
 from pathlib import Path
+from workspace_paths import workspace_root
 
-ROOT=Path(r'D:\CADtest')
+ROOT=workspace_root()
 def sha(path):
     with Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest().upper()
 

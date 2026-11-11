@@ -25,4 +25,13 @@ obj/
 /work/cli-home/
 node_modules/
 *.pdb
-# Required native/review/projector runtime files are intentionally versioned.
+# Rebuild programs from source; old developer-machine binaries are not releases.
+*.dll
+*.exe
+bin/
+obj/
+/work/segmented-20261109/native/
+/work/segmented-20261109/review-native/
+.nuget/
+.dotnet/
+.artifacts/

@@ -16,13 +16,26 @@ public static class ReviewWorkbooks
     static string SafePath(string value)
     {
         var full=Path.GetFullPath(value);
-        if(!full.StartsWith(@"D:\CADtest\",StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Path must remain inside D:/CADtest");
+        var root=WorkspaceRoot();
+        if(!full.StartsWith(root+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase))throw new InvalidDataException("Path must remain inside the configured workspace");
+        // Reject links in existing components rather than accepting a lexical prefix
+        // whose target may escape the workspace. Missing output components are valid.
+        for(var current=full;current.Length>=root.Length;current=Path.GetDirectoryName(current)??"")
+            if((File.Exists(current)||Directory.Exists(current))&&(File.GetAttributes(current)&FileAttributes.ReparsePoint)!=0)
+                throw new InvalidDataException("Workspace paths must not traverse links or junctions");
         return full;
+    }
+    static string WorkspaceRoot()
+    {
+        var configured=Environment.GetEnvironmentVariable("CADTEST_ROOT");
+        if(string.IsNullOrWhiteSpace(configured)||!Path.IsPathFullyQualified(configured)||!Directory.Exists(configured))
+            throw new InvalidDataException("CADTEST_ROOT must name an existing absolute workspace directory; use Run.ps1");
+        return Path.GetFullPath(configured).TrimEnd(Path.DirectorySeparatorChar,Path.AltDirectorySeparatorChar);
     }
     static string NewOutput(string value,string? stagedInput=null)
     {
         var full=SafePath(value);
-        if(!full.StartsWith(@"D:\CADtest\outputs\",StringComparison.OrdinalIgnoreCase)||File.Exists(full))throw new InvalidDataException("Use a new directory below outputs");
+        if(!full.StartsWith(Path.Combine(WorkspaceRoot(),"outputs")+Path.DirectorySeparatorChar,StringComparison.OrdinalIgnoreCase)||File.Exists(full))throw new InvalidDataException("Use a new directory below outputs");
         if(Directory.Exists(full)){
             var entries=Directory.GetFileSystemEntries(full);
             if(stagedInput is null||entries.Length!=1||Path.GetFullPath(entries[0])!=Path.GetFullPath(stagedInput)||Path.GetFileName(stagedInput)!="input-dataset.json")throw new InvalidDataException("Existing results are never overwritten");

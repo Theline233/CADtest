@@ -175,10 +175,10 @@ def parse_manifest(args, root, batch_out, limits):
                 or sid.casefold() in seen):
             raise ValueError('invalid or repeated task id')
         seen.add(sid.casefold())
-        if not isinstance(drawing, str) or not Path(drawing).is_absolute():
-            raise ValueError('drawing path must be absolute')
-        if not isinstance(output, str) or not Path(output).is_absolute():
-            raise ValueError('task output path must be absolute')
+        if not isinstance(drawing, str) or not drawing.strip():
+            raise ValueError('drawing path must be a nonempty workspace path')
+        if not isinstance(output, str) or not output.strip():
+            raise ValueError('task output path must be a nonempty workspace path')
         source = runner.local_path(drawing, root)
         target = runner.local_path(output, root)
         output_root = (root / 'outputs').resolve()
@@ -322,9 +322,7 @@ def main(args, root):
         limits.validate()
         with runner.workspace_lock(root):
             tasks, admission, manifest_sha = parse_manifest(args, root, out, limits)
-            node = Path(args.node).resolve()
-            if not node.is_file():
-                raise ValueError('Node executable missing: ' + str(node))
+            node = runner.node_executable(args.node, root)
             cores = os.cpu_count() or 1
             capacity, budget = safe_parallel_capacity(cores, args.cpu_percent, args.max_parallel)
             settings = {'max_parallel': args.max_parallel, 'capacity': capacity, 'logical_cores': cores,
