@@ -182,7 +182,8 @@ function nameAfterIdentifier(text,number,importStem=false){
 
 // Read only a one-row, grid-proven table belonging to this sheet, and only
 // when the row identifies the sheet itself rather than one of its children.
-// Quantities from either BOM column are evidence, not order quantities.
+// A plain Q'TY is a drawing quantity, not an order quantity. Do not select
+// between different scopes or interpret unlabelled split quantities here.
 function telstarDetail(anchor,owner,bounds,number){
   const none={};
   const headers=texts.filter(t=>t.layout===anchor.layout&&inside(t.position,bounds)&&
@@ -208,20 +209,26 @@ function telstarDetail(anchor,owner,bounds,number){
   const lowWalls=walls(bottom,top),highWalls=walls(rowBottom,rowTop);
   if(lowWalls.length!==7||highWalls.length!==7||lowWalls.some((x,i)=>Math.abs(x-highWalls[i])>tolerance)||
       Math.abs(lowWalls[0]-bottom.lo)>tolerance||Math.abs(lowWalls.at(-1)-bottom.hi)>tolerance)return none;
-  const local=texts.filter(t=>t.layout===header.layout&&t.text.trim()&&inside(t.position,bounds))
-    .map(t=>({t,p:relative(t.position,header)})).filter(e=>e.p);
-  function readCell(i,lower,upper){
+  const edge=0.015;
+  const gridBounds=[bottom.lo-edge,Math.min(bottom.at,rowBottom.at)-edge,
+    bottom.hi+edge,Math.max(top.at,rowTop.at)+edge];
+  // Inspect the whole proven cell, including unreadable text or overlapping
+  // foreign text. Neither can be mistaken for a blank total column.
+  const local=texts.filter(t=>t.layout===header.layout&&(t.text.trim()||t.textRequiresReview))
+    .map(t=>({t,p:relative(t.position,header)})).filter(e=>e.p&&inside(e.p,gridBounds));
+  function cellState(i,lower,upper){
     const left=lowWalls[i],right=lowWalls[i+1];
     // Text baselines can be very close to a column edge; unlike grid joins,
     // the text position is a native point and needs only a narrow edge guard.
-    const edge=0.015;
     const entries=local.filter(({p:[x,y]})=>x>=left-edge&&x<=right+edge&&
       y>=lower.at-edge&&y<=upper.at+edge);
-    if(entries.length!==1)return null;
+    if(entries.length!==1)return {token:null,empty:entries.length===0};
     const [{t,p:[x,y]}]=entries;
-    return !t.textRequiresReview&&t.blockPath===header.blockPath&&x>left+edge&&x<right-edge&&
+    const token=!t.textRequiresReview&&t.blockPath===header.blockPath&&x>left+edge&&x<right-edge&&
       y>lower.at+edge&&y<upper.at-edge?t:null;
+    return {token,empty:false};
   }
+  const readCell=(i,lower,upper)=>cellState(i,lower,upper).token;
   const captions=['NO.','PART NAME STANDARD',"MAT'L","Q'TY","T'Q'TY",'REMARKS'];
   if(captions.some((caption,i)=>{
     const t=readCell(i,bottom,top)?.text.trim();
@@ -235,12 +242,19 @@ function telstarDetail(anchor,owner,bounds,number){
   if(!name||sourceName===null||(sourceName&&normalizedPart(sourceName)!==normalizedPart(name)))
     return {identityConflict:{text:item.text,id:item.id}};
   const material=readCell(2,rowBottom,rowTop);
-  const quantities=[3,4].flatMap(i=>{
-    const token=readCell(i,rowBottom,rowTop);
-    return token?[{text:captions[i]+': '+token.text.trim(),id:token.id}]:[];
-  });
+  const counts=[3,4].map(i=>cellState(i,rowBottom,rowTop));
+  const quantities=counts.flatMap(({token},i)=>token?[{text:captions[i+3]+': '+token.text.trim(),id:token.id}]:[]);
+  const itemCount=counts[0].token;
+  const integer=token=>{
+    const text=token?.text.trim()??'';
+    return /^\d+$/.test(text)&&Number.isSafeInteger(Number(text))?Number(text):null;
+  };
+  const value=integer(itemCount);
+  const total=integer(counts[1].token);
+  const qty=value!==null&&(counts[1].empty||total===value)
+    ?{text:itemCount.text.trim(),id:itemCount.id,bom_column:"Q'TY"}:null;
   return {name:{text:name,id:item.id},material:material?{text:material.text.trim(),id:material.id}:null,
-    quantityContext:quantities,tablePath:header.blockPath};
+    qty,quantityContext:quantities,tablePath:header.blockPath};
 }
 function telstarAssemblyName(labels,title){
   const detail=labels.filter(t=>!t.textRequiresReview&&t.text.trim()==='DETAIL');
@@ -344,18 +358,20 @@ for(const anchor of texts.filter(t=>t.text.trim().toUpperCase()==='NUMBER')){
     drawingNumber,
     drawingCandidates:drawingCandidates.map(t=>({text:t.text,id:t.id})),
     names:detail.name?[detail.name]:assemblyName?[assemblyName]:[],materials:detail.material?[detail.material]:[],
-    quantity:null,quantityUnit:'',quantityEvidence:[],quantityContext:[],quantityLabelEvidence:[],
+    quantity:detail.qty?Number(detail.qty.text):null,quantityUnit:'',quantityEvidence:detail.qty?[detail.qty]:[],
+    quantityContext:[],quantityLabelEvidence:[],
     surfaceTreatment:null,treatmentCandidates:[],treatmentDetails,treatmentIssues:treatmentDetails.issues,
     treatmentRuleVersion:treatmentDetails.rule_version,treatmentEvidence:[],specialNotes:[],subparts:[],recordKind:detail.kind??'part_title',
     fieldScopes:{drawingNumber:'drawing_number_cell',name:detail.name?'same_sheet_part_cell':assemblyName?'assembly_detail_cell':'unresolved',
-      material:detail.material?'same_sheet_material_cell':'unresolved',quantity:'unresolved',treatment:'unresolved'},
+      material:detail.material?'same_sheet_material_cell':'unresolved',quantity:detail.qty?'same_sheet_bom_quantity':'unresolved',treatment:'unresolved'},
     fieldIssues:issueCodes,fieldAssociationEvidence:[{field:'drawingNumber',style:'DRAWING_NUMBER',
       numberLabel:{id:anchor.id,text:anchor.text},drawingLabels:paired.map(t=>({id:t.id,text:t.text})),cell,candidates:evidence},
-      ...(detail.quantityContext?.length?[{field:'quantity',style:'same_sheet_bom_scope_unconfirmed',
+      ...(detail.quantityContext?.length?[{field:'quantity',style:detail.qty?'same_sheet_bom_quantity':'same_sheet_bom_scope_unconfirmed',
         tablePath:detail.tablePath,candidates:detail.quantityContext}]:[]),
       ...(detail.identityConflict?[{field:'name',style:'same_sheet_bom_identity_conflict',candidates:[detail.identityConflict]}]:[])],
     issues:[...(!resolved?['图号非唯一或缺失']:[]),
-      ...(pairedTitle?['数量及工艺范围待核']:['名称、材质、数量及工艺范围待核'])]});
+      ...(detail.qty?['已读零件表单图数量，报价范围及工艺待核']:
+        pairedTitle?['数量及工艺范围待核']:['名称、材质、数量及工艺范围待核'])]});
   frameLabelSelections.push({material:null,quantity:null,name:null});
   frameReviewSelections.push({material:[],quantity:[],name:[]});
 }
@@ -483,6 +499,20 @@ for(const record of frames.flatMap(frame=>[frame,...frame.subparts])){
   if(!record.drawingNumber)continue;
   if(!duplicateGroups.has(record.drawingNumber))duplicateGroups.set(record.drawingNumber,[]);
   duplicateGroups.get(record.drawingNumber).push(record);
+}
+// A BOM quantity belongs to its drawing, not a proven repetition of the
+// requested batch. Leave repeated active drawings for a scope decision.
+for(const allRecords of duplicateGroups.values()){
+  const active=allRecords.filter(record=>!record.crossedOut),group=active.length?active:allRecords;
+  if(group.length<2)continue;
+  for(const record of group){
+    if(record.fieldScopes?.quantity!=='same_sheet_bom_quantity')continue;
+    record.quantity=null;
+    record.quantityEvidence=[];
+    record.fieldScopes.quantity='unresolved';
+    const evidence=record.fieldAssociationEvidence.find(e=>e.style==='same_sheet_bom_quantity');
+    evidence.style='same_sheet_bom_duplicate_scope';
+  }
 }
 for(const allRecords of duplicateGroups.values())for(const field of ['material','name']){
   const active=allRecords.filter(record=>!record.crossedOut),group=active.length?active:allRecords;

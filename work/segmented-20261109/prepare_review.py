@@ -214,8 +214,12 @@ def main():
                 if len(row.get('quantity_candidate_unit_options',[]))>1:notes.append('单位候选：'+' / '.join(row['quantity_candidate_unit_options']))
                 if row.get('treatment') is None and row.get('treatment_candidates'):notes.append('已读出的工艺候选（请核对原文）：'+' / '.join(row['treatment_candidates']))
                 association=row.get('field_association_evidence',[])
+                if any(a.get('style')=='same_sheet_bom_quantity' for a in association):
+                    notes.append('数量取本图零件表 Q’TY；报价数量和单位请核对')
                 if any(a.get('style')=='same_sheet_bom_scope_unconfirmed' for a in association):
-                    notes.append('零件表数量原文仅供参考，请确认本次报价数量和单位')
+                    notes.append('零件表数量不唯一或口径不明确，请查看数量原文')
+                if any(a.get('style')=='same_sheet_bom_duplicate_scope' for a in association):
+                    notes.append('同图号多处出现，零件表数量未累加，请核对计入范围')
                 if any(a.get('style')=='same_sheet_bom_identity_conflict' for a in association):
                     notes.append('零件表名称或编号与本图不符，未采用该表的字段；请核对图号及报价范围')
                 def association_values(entry):
@@ -243,7 +247,7 @@ def main():
                     if (i,row['drawing_number']) in locations),None)
                 items.append({'id':identity,'file_id':sid,'cad':{'drawing_number':row['drawing_number'],**{f:row.get(f) for f in ('name','material','treatment','quantity','unit')}},
                     'warnings':'；'.join(notes),'requires_review':bool(notes),'kind':'；'.join(kinds),'parents':row.get('parent_drawing_numbers',[]),
-                    'quantity_evidence':'；'.join(dict.fromkeys([x['text'] for k in ('quantity','quantity_context') for x in ev.get(k,[])]+
+                    'quantity_evidence':'；'.join(dict.fromkeys([x['text'] for k in ('quantity','quantity_context') for x in ev.get(k,[]) if not x.get('bom_column')]+
                         [v for a in association if a.get('field')=='quantity' for v in association_values(a)])),
                     'treatment_evidence':'；'.join(dict.fromkeys(x['text'] for x in ev.get('treatment',[]))), 'reference_info':reference_info,
                     **({'frame_location':location} if location is not None else {}),

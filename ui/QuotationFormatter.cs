@@ -13,8 +13,7 @@ using ClosedXML.Excel;
 namespace CadReviewUI;
 
 /// <summary>
-/// Produces a presentation copy only after the guarded engine export has succeeded.
-/// The engine's workbook and audit records remain the authority for the decisions.
+/// Uses the same native template for a snapshot draft and for a guarded export.
 /// </summary>
 public static class QuotationFormatter
 {
@@ -33,7 +32,24 @@ public static class QuotationFormatter
         ["样本", "图号", "部品名", "材质", "表面处理", "数量", "单位", "单价", "金额", "复核说明", "原图文件", "记录ID"];
 
     private sealed record ConfirmedRow(string Id, string FileId, string DrawingNumber, string? Name,
-        string Material, string? Treatment, decimal? Quantity, string? Unit, string Reason, string FileName);
+        string Material, string? Treatment, decimal? Quantity, string? Unit, string Reason, string FileName)
+    {
+        internal ExactQuotationRow ForTemplate() =>
+            new(Id, FileId, DrawingNumber, Name, Material, Treatment, Quantity, Unit, FileName);
+    }
+
+    private static string TemplatePath => Path.Combine(AppContext.BaseDirectory, "templates", "ExactQuotationTemplate-native-korean-header.xlsx");
+
+    internal static byte[] BuildDraft(IReadOnlyList<ExactQuotationRow> rows)
+    {
+        using var template = HoldInput(TemplatePath);
+        byte[] templateBytes = ReadSnapshot(template);
+        if (Hash(templateBytes) != ExpectedTemplateSha256)
+            throw new InvalidDataException("报价样式模板已改变，请恢复程序自带的模板。");
+        byte[] bytes = ExactTemplateWriter.Build(templateBytes, rows, draft: true);
+        CheckPublishedWorkbook(bytes, templateBytes, rows, draft: true);
+        return bytes;
+    }
 
     /// <summary>
     /// Called while TaskSession still holds its review/archive locks, after the guarded
@@ -56,7 +72,6 @@ public static class QuotationFormatter
         RejectReparseDirectories(destination);
         RejectReparseDirectories(engine);
 
-        string templatePath = Path.Combine(AppContext.BaseDirectory, "templates", "ExactQuotationTemplate-native-korean-header.xlsx");
         string originalPath = Path.Combine(engine, OutputName);
         string auditPath = Path.Combine(engine, "确认结果.json");
         string validationPath = Path.Combine(engine, "validation.json");
@@ -72,7 +87,7 @@ public static class QuotationFormatter
         using var original = HoldInput(originalPath);
         using var audit = HoldInput(auditPath);
         using var validation = HoldInput(validationPath);
-        using var template = HoldInput(templatePath);
+        using var template = HoldInput(TemplatePath);
         byte[] originalBytes = ReadSnapshot(original);
         byte[] auditBytes = ReadSnapshot(audit);
         byte[] validationBytes = ReadSnapshot(validation);
@@ -92,8 +107,7 @@ public static class QuotationFormatter
         string nonce = Guid.NewGuid().ToString("N");
         string stagedWorkbook = Path.Combine(destination, ".quotation-" + nonce + ".tmp.xlsx");
         string stagedLink = Path.Combine(destination, ".quotation-" + nonce + ".tmp.json");
-        var writerRows = rows.Select(r => new ExactQuotationRow(r.Id, r.FileId, r.DrawingNumber, r.Name,
-            r.Material, r.Treatment, r.Quantity, r.Unit, r.FileName)).ToArray();
+        var writerRows = rows.Select(r => r.ForTemplate()).ToArray();
         byte[] builtBytes = ExactTemplateWriter.Build(templateBytes, writerRows);
         if (builtBytes == null || builtBytes.Length == 0 || builtBytes.LongLength > MaxInputBytes)
             throw new InvalidDataException("格式化结果大小不在允许范围内。");
@@ -105,7 +119,7 @@ public static class QuotationFormatter
 
         byte[] outputBytes;
         using (var file = HoldInput(stagedWorkbook)) outputBytes = ReadSnapshot(file);
-        CheckPublishedWorkbook(outputBytes, templateBytes, rows);
+        CheckPublishedWorkbook(outputBytes, templateBytes, writerRows);
         string outputHash = Hash(outputBytes);
         var association = new
         {
@@ -144,7 +158,7 @@ public static class QuotationFormatter
         {
             byte[] finalBytes = ReadSnapshot(final);
             if (Hash(finalBytes) != outputHash) throw new InvalidDataException("发布后的文件哈希不一致。");
-            CheckPublishedWorkbook(finalBytes, templateBytes, rows);
+            CheckPublishedWorkbook(finalBytes, templateBytes, writerRows);
         }
         string associationHash;
         using (var link = HoldInput(linkPath))
@@ -438,7 +452,7 @@ public static class QuotationFormatter
     }
 
     private static string QuantityText(decimal value) => value.ToString("0.############################", Invariant);
-    private static string DrawingCaption(IReadOnlyList<ConfirmedRow> rows)
+    private static string DrawingCaption(IReadOnlyList<ExactQuotationRow> rows)
     {
         var byFile = rows.GroupBy(x => x.FileId, StringComparer.Ordinal).ToArray();
         if (byFile.Length == 0) throw new InvalidDataException("没有可导出的图纸。");
@@ -484,7 +498,7 @@ public static class QuotationFormatter
 
     // Reopen the staged file, compare its contents to the confirmed records, and
     // compare every fixed part of the native template before making it visible.
-    private static void CheckPublishedWorkbook(byte[] bytes, byte[] templateBytes, IReadOnlyList<ConfirmedRow> rows)
+    private static void CheckPublishedWorkbook(byte[] bytes, byte[] templateBytes, IReadOnlyList<ExactQuotationRow> rows, bool draft = false)
     {
         int total = FirstRow + Math.Max(TemplateDetailRows, rows.Count);
         CheckNativeParts(templateBytes, bytes, total);
@@ -508,7 +522,7 @@ public static class QuotationFormatter
                 var actual = dst.Cell(row, col);
                 if (!expected.Style.Equals(actual.Style))
                     throw new InvalidDataException("标题或表头样式与原模板不一致。");
-                if (row == 2 && col == 3) SameText(actual, DrawingCaption(rows));
+                if (row == 2 && col == 3) SameText(actual, (draft ? "【待核对】" : "") + DrawingCaption(rows));
                 else
                 {
                     if (expected.HasFormula || (!expected.IsEmpty() && expected.DataType != XLDataType.Text))

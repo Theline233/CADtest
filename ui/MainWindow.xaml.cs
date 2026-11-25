@@ -120,7 +120,7 @@ public partial class MainWindow : Window
         {
             if (child is not DependencyObject node) continue;
             if (node is Button button && button.Content is string label &&
-                label is "校验" or "导出确认明细" or "确认并导出 Excel" or "识别设置…" or "API 设置…" or "图片 API 复查…")
+                label is "校验" or "导出确认明细" or "直接导出 Excel" or "识别设置…" or "API 设置…" or "图片 API 复查…")
             {
                 button.IsEnabled = false;
                 button.ToolTip = "演示模式不能执行此操作。";
@@ -1230,7 +1230,7 @@ public partial class MainWindow : Window
             ? "这张图纸不会导出。请在“更多图纸选项”中写明不纳入的原因。"
             : HasUnresolvedFileNote(file) || (needsReview && !CanConfirmFileSimply(file))
                 ? "这张图纸还有需要具体处理的内容，请展开“更多图纸选项”查看。"
-            : "请用 AutoCAD 打开原图，核对明细和重复图框的计入范围；导出时确认即可。";
+            : "请用 AutoCAD 打开原图，核对明细和重复图框的计入范围。";
     }
 
     void UpdateStats()
@@ -1293,29 +1293,7 @@ public partial class MainWindow : Window
             WorkflowHint.Text = Engine.NoDetailsMessage;
             return;
         }
-        var excluded = _task.Files.Where(f => f.State == "不纳入本次").Select(f => f.Id).ToHashSet();
-        int pending = _task.Items.Count(i => i.Mode == Rules.Pending && !excluded.Contains(i.FileId));
-        var filesWithItems = _task.Items.Select(i => i.FileId).ToHashSet();
-        var filesWithIncluded = _task.Items.Where(i => i.Mode is Rules.Adopt or Rules.Revise).Select(i => i.FileId).ToHashSet();
-        var filesToCheck = _task.Files.Where(f =>
-        {
-            if (excluded.Contains(f.Id)) return false;
-            bool empty = !filesWithItems.Contains(f.Id);
-            bool included = filesWithIncluded.Contains(f.Id);
-            return (included || empty) && (f.State == "待核查" ||
-                ((f.RequiresAcknowledgement || empty) && (f.State != "已核查" || !Rules.Meaningful(f.Note))));
-        }).ToList();
-        int needDetails = filesToCheck.Count(f => !filesWithItems.Contains(f.Id) || !CanConfirmFileSimply(f));
-        int simplePending = _task.Items.Count(i => CanPreviewAdopt(i, excluded));
-        WorkflowHint.Text = pending > 0 && simplePending == pending
-            ? $"请对照原图核对 {pending} 条明细，核对后点击右上角“确认并导出 Excel”。"
-            : pending > 0
-            ? $"还有 {pending - simplePending} 条明细需要单独处理。请核对原图，再选择采用、修订或不纳入。"
-            : needDetails > 0
-                ? $"还有 {needDetails} 张图纸需要处理具体事项，请点击导出后按提示查看。"
-            : filesToCheck.Count > 0
-                ? $"请对照原图核对 {filesToCheck.Count} 张图纸，完成后点击右上角“导出 Excel”并确认。"
-                : "核对完成后，点击右上角“导出 Excel”，确认后即可生成明细表。";
+        WorkflowHint.Text = "可直接导出当前明细，缺项留空；正式报价前请核对。";
     }
 
     void OnTaskChanged()
@@ -1742,10 +1720,10 @@ public partial class MainWindow : Window
         {
             case "ready":
                 string treatment = dto.TreatmentExceptions.Count == 0 ? "" :
-                    $"\n其中 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认，导出时须另行确认。";
+                    $"\n其中 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认，导出复核版时须另行确认。";
                 string quantity = dto.QuantityHandoffs.Count == 0 ? "" :
                     $"\n其中 {dto.QuantityHandoffs.Count} 条的数量或单位可留空，到 Excel 补填。";
-                Status($"校验通过：可导出 {dto.Accepted.Count} 条，排除 {dto.Excluded.Count} 条");
+                Status($"复核版校验通过：可导出 {dto.Accepted.Count} 条，排除 {dto.Excluded.Count} 条");
                 MessageBox.Show(this, $"校验通过。\n将纳入 {dto.Accepted.Count} 条明细，另有 {dto.Excluded.Count} 条被排除。{quantity}{treatment}", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
                 break;
             case "nothing_to_export":
@@ -1789,15 +1767,15 @@ public partial class MainWindow : Window
     }
 
     // ───────────────────────── 批量导出 ─────────────────────────
-    // 依次切换到每张已打开的图纸，沿用单张导出的全部检查与“导出前确认”，保存到同一文件夹。
-    async void BatchExport_Click(object sender, RoutedEventArgs e) => await BatchExportAsync();
+    async void BatchExport_Click(object sender, RoutedEventArgs e) => await BatchExportAsync(direct: true);
+    async void BatchReviewedExport_Click(object sender, RoutedEventArgs e) => await BatchExportAsync();
 
-    internal async Task BatchExportAsync()
+    internal async Task BatchExportAsync(bool direct = false)
     {
         if (_busy || _runCts != null) return;
         if (_isDemo) { Status("演示模式不能校验或导出。"); return; }
         if (_orderTabs.Count == 0) { Status("还没有打开的图纸。"); return; }
-        if (!Rules.Meaningful(ReviewerBox.Text.Trim()))
+        if (!direct && !Rules.Meaningful(ReviewerBox.Text.Trim()))
         {
             _showDialog("请先填写右上角的复核人姓名，再导出。", "请填写复核人", MessageBoxButton.OK, MessageBoxImage.Information);
             ReviewerBox.Focus();
@@ -1826,7 +1804,7 @@ public partial class MainWindow : Window
                 Status($"批量导出 {i + 1} / {tabs.Count}：{tab.DisplayName}", toast: false);
                 if (!TryOpenTask(tab.Folder)) { results.Add($"{number}. {tab.DisplayName}：无法打开，已跳过"); continue; }
                 _lastExportedPath = _lastExportWarning = null;
-                if (await ExportCurrentAsync(batch: true))
+                if (direct ? await ExportDraftAsync(batch: true) : await ExportCurrentAsync(batch: true))
                 {
                     exportedCount++;
                     results.Add($"{number}. {tab.DisplayName}：已导出为 {Path.GetFileName(_lastExportedPath)}" +
@@ -2122,8 +2100,7 @@ public partial class MainWindow : Window
             var first = index >= 0 && index < entries.Count ? entries[index] : entries.FirstOrDefault();
             if (first != null) FocusIssue(first);
             string explanation = first?.Text ?? "请查看下方的待处理问题。";
-            if (WorkflowHint != null) WorkflowHint.Text = "先处理下面提示的问题，完成后再点击“确认并导出 Excel”。";
-            _showDialog($"还有 {ErrorList.Items.Count} 项需要处理，暂未导出。\n\n{explanation}\n\n处理后再点击“确认并导出 Excel”。",
+            _showDialog($"还有 {ErrorList.Items.Count} 项需要处理，未生成复核版。\n\n{explanation}\n\n如需先保存当前明细，可点击“直接导出 Excel”。",
                 "先完成核对", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
         else if (dto.Status == "nothing_to_export")
@@ -2132,7 +2109,7 @@ public partial class MainWindow : Window
             _showDialog("暂时无法完成导出检查：" + (dto.Error ?? string.Join("\n", dto.Errors.Take(3))), "无法导出", MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
-    async void Export_Click(object sender, RoutedEventArgs e) => await ExportCurrentAsync(batch: false);
+    async void ReviewedExport_Click(object sender, RoutedEventArgs e) => await ExportCurrentAsync(batch: false);
 
     string? _lastExportedPath, _lastExportWarning;
 

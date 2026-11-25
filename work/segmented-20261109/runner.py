@@ -36,7 +36,7 @@ PREPARE_REVIEW = APP_REL / 'prepare_review.py'
 INDEPENDENT_AUDIT = APP_REL / 'independent_projection_audit.py'
 # The projector's title/path geometry contract was reviewed against this exact
 # extractor. A rule change must be re-reviewed and differentially tested first.
-EXTRACTOR_CONTRACT_SHA256 = 'A3FD7EEABC5850112D74BF5EFC5969CCD89193CFF2ABC0271C882589AE36CAB4'
+EXTRACTOR_CONTRACT_SHA256 = '59E73813F9A97F77FA58E65DD13C1CB2355AE82D495FF54D822E37F9133DBAE4'
 POLL_SECONDS = .05
 
 
