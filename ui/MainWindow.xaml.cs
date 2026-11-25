@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     internal Func<IReadOnlyList<ItemRow>, string?> CrossedReasonPrompt { get; set; }
     internal Func<ItemRow, IReadOnlyList<DsDuplicateOccurrence>, DsDuplicateOccurrence?> DuplicateChoicePrompt { get; set; }
     internal Func<string, TaskSession, SafeExportDestination?> DestinationSelector { get; set; }
+    internal Func<IReadOnlyList<string>?>? RecognitionFilePicker { get; set; }
     internal Action<string> OpenExportSelection { get; set; } = path =>
         Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
     internal Action<SafeExportDestination, string, string, string?> RecordExportSelection { get; set; } =
@@ -329,8 +330,7 @@ public partial class MainWindow : Window
     void Window_Loaded(object sender, RoutedEventArgs e)
     {
         var notReady = Engine.CheckReady();
-        var noRecognize = Engine.RecognizeScript == null ? "找不到识别入口脚本 " + Engine.SegmentedScript
-            : Engine.FindShell() == null ? "找不到 PowerShell，无法启动识别。" : null;
+        var noRecognize = Engine.RecognitionStartupIssue();
         WelcomeNotice.Text = _isDemo ? "演示模式：仅预览，不能新建识别、调用 API、校验或导出。" : notReady ?? noRecognize ?? "";
         NewButton.IsEnabled = !_isDemo && notReady == null && noRecognize == null;
         LoadLayout();
@@ -514,13 +514,18 @@ public partial class MainWindow : Window
     // ───────────────────────── 新建识别 ─────────────────────────
     async void NewRecognize_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDemo || _busy || _runCts != null || _recentRemoving) return;
+        if (_isDemo || _busy || _runCts != null || _recentRemoving || !NewButton.IsEnabled) return;
+        var drawings = RecognitionFilePicker != null ? RecognitionFilePicker() : PickDrawings();
+        if (drawings is { Count: > 0 }) await ImportDrawingsAsync(drawings);
+    }
+
+    IReadOnlyList<string>? PickDrawings()
+    {
         var dialog = new OpenFileDialog
         {
             Title = "选择要识别的 DWG 图纸（可多选）", Filter = "DWG 图纸 (*.dwg)|*.dwg", Multiselect = true, CheckFileExists = true,
         };
-        if (dialog.ShowDialog(this) != true) return;
-        await ImportDrawingsAsync(dialog.FileNames);
+        return dialog.ShowDialog(this) == true ? dialog.FileNames : null;
     }
 
     void Window_PreviewDragOver(object sender, DragEventArgs e)

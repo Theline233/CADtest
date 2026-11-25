@@ -16,7 +16,7 @@ public static class DesktopIntegrationSelfTest
     const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
     // Real import handlers with an empty DWG fixture and a known readable DWG.
-    public static async Task<int> RunRecognitionAsync(string output, string empty, string nonempty)
+    public static async Task<int> RunRecognitionAsync(string output, string? empty, string? nonempty)
     {
         if (Directory.Exists(output)) throw new ArgumentException("Use a new output directory.");
         Directory.CreateDirectory(output);
@@ -35,7 +35,42 @@ public static class DesktopIntegrationSelfTest
         try
         {
             window.Show();
-            await window.ImportDrawingsAsync([empty]);
+            await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
+            await window.RenderToPngAsync(Path.Combine(output,"home.png"));
+            var newButton = (Button)window.FindName("NewButton");
+            Check("normal homepage enables choosing drawings", newButton.IsEnabled && Label("WelcomeNotice").Length == 0);
+            if (empty == null || nonempty == null) return 0;
+
+            async Task FinishImport(string entry)
+            {
+                var progress = (FrameworkElement)window.FindName("RunningPanel");
+                Check(entry + " reaches the actual import", progress.Visibility == Visibility.Visible);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+                while (progress.Visibility == Visibility.Visible) await Task.Delay(50, timeout.Token);
+            }
+            int pickerCalls = 0;
+            window.RecognitionFilePicker = () => { pickerCalls++; return [nonempty]; };
+            newButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await FinishImport("homepage selection");
+            Check("homepage selection produces an opened nonempty review", pickerCalls == 1 && dialogs.Count == 0 &&
+                Label("StatusText") == "已完成 1 / 1 张图纸。" && window.ActiveTaskSummary.Contains("条"));
+
+            // Exercise WPF's registered preview events rather than calling the importer.
+            var dragConstructor = typeof(DragEventArgs).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic,
+                null, [typeof(IDataObject), typeof(DragDropKeyStates), typeof(DragDropEffects), typeof(DependencyObject), typeof(Point)], null)!;
+            var fileDrop = new DataObject(DataFormats.FileDrop, new[] { empty });
+            DragEventArgs Drag(RoutedEvent route)
+            {
+                var ev = (DragEventArgs)dragConstructor.Invoke([fileDrop, DragDropKeyStates.LeftMouseButton,
+                    DragDropEffects.Copy, window, new Point(1,1)]);
+                ev.RoutedEvent = route;
+                return ev;
+            }
+            var over = Drag(DragDrop.PreviewDragOverEvent);
+            window.RaiseEvent(over);
+            Check("dragging a DWG is accepted", over.Effects == DragDropEffects.Copy);
+            window.RaiseEvent(Drag(DragDrop.PreviewDropEvent));
+            await FinishImport("drag and drop");
             Check("empty import reports no details", Label("StatusText")==Engine.NoDetailsMessage && dialogs.Count==0);
             Check("empty task retains visible warning and is not marked processed",
                 Label("WorkflowHint")==Engine.NoDetailsMessage && window.ActiveTaskSummary=="未提取到明细");

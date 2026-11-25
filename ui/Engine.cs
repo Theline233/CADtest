@@ -54,9 +54,9 @@ public static class Engine
         return python == null || node == null ? null : (python, node);
     }
 
+    const string BundledPython = @"runtime\python\python.exe", BundledNode = @"runtime\node\node.exe";
     internal static bool HasBundledRuntime =>
-        File.Exists(Path.Combine(Root, @"runtime\python\python.exe")) &&
-        File.Exists(Path.Combine(Root, @"runtime\node\node.exe"));
+        File.Exists(Path.Combine(Root, BundledPython)) && File.Exists(Path.Combine(Root, BundledNode));
 
     internal static void ConfigureChild(ProcessStartInfo start)
     {
@@ -398,15 +398,51 @@ public static class Engine
         return psi;
     }
 
+    sealed record RecognitionLaunch(string Script, string? Shell, string Python, string Node);
+
+    static RecognitionLaunch? ResolveRecognitionLaunch(out string? issue)
+    {
+        string? script, shell = null;
+        if (HasBundledRuntime || File.Exists(Path.Combine(Root, "PACKAGE-INFO.json")))
+        {
+            script = Path.Combine(SegmentedDir, "runner.py");
+            foreach (string file in new[] { Path.Combine(Root, BundledPython), Path.Combine(Root, BundledNode), script })
+            {
+                if (File.Exists(file)) continue;
+                issue = "安装文件不完整，缺少 " + Path.GetRelativePath(Root, file) + "。请用完整安装包覆盖安装，或重新解压便携版。";
+                return null;
+            }
+        }
+        else
+        {
+            script = RecognizeScript;
+            if (script == null) { issue = "找不到识别入口脚本：" + SegmentedScript; return null; }
+            shell = FindShell();
+            if (shell == null) { issue = "找不到 PowerShell 7。旧脚本识别需要 PowerShell 7，也可使用带运行时的安装包。"; return null; }
+        }
+        var runtime = FindParallelRuntime();
+        if (runtime == null)
+        {
+            issue = "找不到可用的 Python 或 Node.js。请检查 CADTEST_PYTHON / CADTEST_NODE 和 PATH。";
+            return null;
+        }
+        issue = null;
+        return new(script, shell, runtime.Value.Python, runtime.Value.Node);
+    }
+
+    internal static string? RecognitionStartupIssue()
+    {
+        ResolveRecognitionLaunch(out var issue);
+        return issue;
+    }
+
     public static async Task<RecognizeOutcome> RecognizeAsync(IReadOnlyList<string> drawings, string outputDir,
         Action<string> log, CancellationToken ct)
     {
-        var runtime = FindParallelRuntime();
-        if (runtime == null) return new(false, "", "找不到 Python 或 Node.js。请安装运行时并加入 PATH，或设置 CADTEST_PYTHON / CADTEST_NODE。");
-        var python = runtime.Value.Python;
-        var node = runtime.Value.Node;
+        var launch = ResolveRecognitionLaunch(out var issue);
+        if (launch == null) return new(false, "", issue!);
         RunOutcome run;
-        if (HasBundledRuntime)
+        if (launch.Shell == null)
         {
             string full = Path.GetFullPath(outputDir);
             string prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputsRoot)) + Path.DirectorySeparatorChar;
@@ -415,21 +451,15 @@ public static class Engine
             var plan = ResourceAuto.Current();
             log(plan.Describe());
             if (plan.Warning != null) log(plan.Warning);
-            var direct = new ProcessStartInfo(python);
-            foreach (string value in new[] { "-B", "-X", "utf8", Path.Combine(SegmentedDir, "runner.py"),
-                "--output", Path.Combine(full, "recognition"), "--node", node, "--prepare-review" }
+            var direct = new ProcessStartInfo(launch.Python);
+            foreach (string value in new[] { "-B", "-X", "utf8", launch.Script,
+                "--output", Path.Combine(full, "recognition"), "--node", launch.Node, "--prepare-review" }
                 .Concat(ResourceAuto.RecognizeArgs(plan)).Concat(new[] { "--drawing" }).Concat(drawings))
                 direct.ArgumentList.Add(value);
             run = await RunLinesAsync(direct, log, ct);
         }
         else
-        {
-            var shell = FindShell();
-            if (shell == null) return new(false, "", "找不到 PowerShell 7。请安装 PowerShell 7 或设置 CADTEST_POWERSHELL。");
-            var script = RecognizeScript;
-            if (script == null) return new(false, "", "找不到识别入口脚本：" + SegmentedScript);
-            run = await RunLinesAsync(RecognitionCommand(shell, script, drawings, outputDir, python, node), log, ct);
-        }
+            run = await RunLinesAsync(RecognitionCommand(launch.Shell, launch.Script, drawings, outputDir, launch.Python, launch.Node), log, ct);
         var review = Path.Combine(outputDir, "review");
         if (run.ExitCode == 0 && File.Exists(Path.Combine(review, "source.json")) && File.Exists(Path.Combine(review, "图纸复核.xlsx")))
         {
