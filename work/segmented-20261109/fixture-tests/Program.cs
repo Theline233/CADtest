@@ -1,6 +1,6 @@
 using ClosedXML.Excel;
 
-if(args.Length < 2) throw new ArgumentException("fixture INPUT OUTPUT | recalc OUTPUT");
+if(args.Length < 2) throw new ArgumentException("fixture INPUT OUTPUT | recalc OUTPUT | treatment-dwg OUTPUT NOTES");
 if(args[0]=="fixture")
 {
     if(args.Length!=3 || File.Exists(args[2])) throw new ArgumentException("Use a new fixture path");
@@ -39,4 +39,6 @@ else if(args[0]=="recalc")
     if(!reopened.Worksheet("确认明细").Cell(8,8).IsEmpty() || !reopened.Worksheet("确认明细").Cell(9,8).IsEmpty()) throw new Exception("Test prices persisted");
     Console.WriteLine("reopened_and_recalculated_in_memory_20_and_0");
 }
+else if (args[0]=="treatment-dwg" && args.Length==3)
+    TreatmentFixture.Write(args[1], File.ReadAllLines(args[2]));
 else throw new ArgumentException("Unknown test command");

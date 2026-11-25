@@ -10,6 +10,34 @@ const single = values => values.length === 1 ? values[0] : null;
 const array = value => Array.isArray(value) ? value : [];
 const fieldText = (frames, field) => present(frames.flatMap(f => array(f[field]).map(e => e.text?.trim())));
 
+// New chrome and parameter-bearing results require one identified part frame.
+// Keep the extractor's lexical evidence even when a source entity lies in
+// overlapping frames or belongs to an unrelated insert.
+function treatmentForFrame(frame, frames) {
+  const details = frame.treatmentDetails ?? {value:frame.surfaceTreatment??null,issues:[],rule_version:'legacy'};
+  const issues = unique([...array(frame.treatmentIssues), ...array(details.issues)]);
+  if (frame.surfaceTreatment == null || issues.length) return {frame_index: frame.index, ...details, issues};
+  const claim = array(details.evidence).filter(e => array(e.clauses).some(
+    c => array(c.matches).some(m => ['chrome', 'hard_chrome', 'nitriding_heat_treatment'].includes(m.rule))));
+  const contains = (bounds, x, y) => Array.isArray(bounds)
+    && x >= bounds[0]-0.001 && x <= bounds[2]+0.001 && y >= bounds[1]-0.001 && y <= bounds[3]+0.001;
+  const ambiguous = e => {
+    if (!frame.framePath || !e.blockPath || !frame.layout || frame.layout !== e.layout) return true;
+    if (!(e.blockPath === frame.framePath || e.blockPath.startsWith(frame.framePath+'/')
+      || frame.framePath.startsWith(e.blockPath+'/'))) return true;
+    const [x, y] = array(e.position);
+    if (!Number.isFinite(x) || !Number.isFinite(y) || !contains(frame.bounds, x, y)) return true;
+    return frames.some(f => f !== frame && f.layout === frame.layout && contains(f.bounds, x, y));
+  };
+  if (claim.length &&
+    (frame.recordKind === 'subpart' || frame.recordKind === 'assembly_title'
+      || ['unresolved','shared_parent_frame'].includes(frame.fieldScopes?.treatment) || claim.some(ambiguous))) {
+    issues.push('treatment_ownership_requires_review');
+  }
+  return {frame_index:frame.index,...details,issues,
+    ...(issues.includes('treatment_ownership_requires_review') ? {value:null,status:'needs_review',value_includes_parameters:false} : {})};
+}
+
 /** Compatible with batch-validation/predict.mjs and compare.py:
  * all old record fields retain their names/types; quantity_options remains number[].
  * Additions: quantity_scope ('quantity_field'|'total_explicit'|null),
@@ -74,12 +102,14 @@ export function predict(native) {
     // but do not make another frame's value look confirmed for every frame.
     const completeMaterial = frames.every(f => fieldText([f], 'materials').length === 1);
     const completeName = frames.every(f => fieldText([f], 'names').length === 1);
-    const treatments = present(frames.map(f => f.surfaceTreatment));
-    const treatmentDetails = frames.map(f => ({frame_index:f.index,...(f.treatmentDetails??{value:f.surfaceTreatment??null,issues:[],rule_version:'legacy'})}));
-    const treatmentIssues = unique(frames.flatMap(f => array(f.treatmentIssues)));
-    const allTreatments = unique(frames.map(f => f.surfaceTreatment??null));
-    const hasTreatmentParameters=frames.some(f=>array(f.treatmentDetails?.evidence).some(e=>array(e.clauses).some(c=>array(c.parameters).length)));
-    const treatment = treatmentIssues.length===0 && allTreatments.length===1 && !hasTreatmentParameters ? allTreatments[0] : null;
+    const treatmentDetails = frames.map(f => treatmentForFrame(f, array(native.frames)));
+    const treatmentIssues = unique(treatmentDetails.flatMap(d => d.issues));
+    const allTreatments = unique(treatmentDetails.map(d => d.value ?? null));
+    const treatments = present(allTreatments);
+    const hasParameters = d => array(d.evidence).some(e => array(e.clauses).some(c => array(c.parameters).length));
+    const hasTreatmentParameters = treatmentDetails.some(hasParameters);
+    const incompleteParameters = treatmentDetails.some(d => hasParameters(d) && !d.value_includes_parameters);
+    const treatment = treatmentIssues.length === 0 && allTreatments.length === 1 && !incompleteParameters ? allTreatments[0] : null;
     const issues = [];
     if (materials.length !== 1 || !completeMaterial) issues.push('material_missing_or_conflicting');
     if (names.length !== 1 || !completeName) issues.push('name_missing_or_conflicting');

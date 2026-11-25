@@ -79,6 +79,8 @@ def main():
         'quantity_invalid_expression':'数量表达式未支持','quantity_invalid_equation':'数量等式未通过','quantity_component_mismatch':'正反件分量不一致',
         'quantity_unit_conflict':'数量单位不一致','unit_missing_or_conflicting':'单位缺失或冲突','material_missing_or_conflicting':'材质缺失或冲突',
         'name_missing_or_conflicting':'名称缺失或冲突','treatment_not_recognized':'工艺尚未确定','treatment_requires_review':'工艺需要确认',
+        'treatment_conflict':'同图号各处工艺不一致','treatment_ownership_requires_review':'工艺标注归属不明，未填入工艺',
+        'parameters_require_review':'工艺参数不一致，请核对原文','uncertain_instruction':'工艺包含任选、待定或参照说明',
         'scope_requires_review':'工艺范围需核对','multiple_treatments_require_review':'存在多个工艺要求','negation_or_exclusion':'工艺包含否定/排除',
         'unrecognized_treatment':'有工艺原文但未识别','source_text_requires_review':'工艺原文格式待核','frame_field_issues':'标注关联待核',
         'quantity_component_conflict':'总量相同但正反件拆分不同','treatment_parameters_require_confirmation':'工艺含硬度/厚度等参数，请确认完整要求',
@@ -178,7 +180,8 @@ def main():
                 issues=set(row.get('issues',[]))
                 treatment_details={'scope_requires_review','multiple_treatments_require_review','negation_or_exclusion','unrecognized_treatment',
                     'source_text_requires_review','treatment_parameters_require_confirmation','treatment_missing_or_conflicting_across_frames','pretreated_stock_not_part_finish',
-                    'parameter_scope_requires_review','treatment_variant_requires_review'}
+                    'parameter_scope_requires_review','treatment_variant_requires_review','parameters_require_review','uncertain_instruction',
+                    'treatment_ownership_requires_review','treatment_conflict'}
                 if issues & treatment_details:issues-={'treatment_not_recognized','treatment_requires_review'}
                 if any(i.startswith('quantity_') and i!='quantity_unresolved' for i in issues):issues.discard('quantity_unresolved')
                 for issue in dict.fromkeys(i for i in row.get('issues',[]) if i in issues):
@@ -191,7 +194,7 @@ def main():
                 if row.get('quantity') is None and row.get('quantity_options'):notes.append('已读出的数量候选：'+ ' / '.join(map(str,row['quantity_options'])))
                 if len(row.get('quantity_component_options',[]))>1:notes.append('正反件拆分候选：'+'；'.join(f"{c['normal']}/{c['mirror']}" for c in row['quantity_component_options']))
                 if len(row.get('quantity_candidate_unit_options',[]))>1:notes.append('单位候选：'+' / '.join(row['quantity_candidate_unit_options']))
-                if row.get('treatment') is None and row.get('treatment_candidates'):notes.append('已读出的工艺候选（范围仍待核）：'+' / '.join(row['treatment_candidates']))
+                if row.get('treatment') is None and row.get('treatment_candidates'):notes.append('已读出的工艺候选（请核对原文）：'+' / '.join(row['treatment_candidates']))
                 association=row.get('field_association_evidence',[])
                 def association_values(entry):
                     evidence=entry.get('candidates',[])+entry.get('reviewTexts',[])+entry.get('quantityContext',[])
