@@ -61,6 +61,7 @@ New-Item -ItemType Directory -Path .\inputs -Force
 - 支持多张独立任务并行，受内存、CPU、磁盘和共享锁约束。
 - 同图号兼容数量默认累加；整框打 X 的候选默认排除。冲突、缺单位、工艺范围和父子计价范围仍须核对。
 - 明确且分别编号的氮化热处理（含完整 HRC 范围）与镀铬可成组显示；韩英同义标注保留原文，但只显示一次译名。
+- 支持 TELSTAR A1/A3 分块标题栏：验证边框和标题栏配对及单元格边线后读取图号原文。装配项名称取自 `DETAIL` 栏；只有本图单行零件表能明确对应图号时才采集零件名称和材质。该表的数量列保留为复核证据，不自动当作报价数量。零明细仍保存诊断，界面提示未提取到明细。
 - 后端导出通用确认明细；桌面端可导出中韩文报价样式，单价留空，保留复核和来源记录。
 - 单张默认上限 64 MiB，每批最多 20 张、总计 256 MiB；大图是否能处理还取决于图内结构和可用资源。
 - Windows Job Object、GO 握手、超时和冻结哈希检查继续启用。目前不支持在 Linux/macOS 上运行完整流程。
@@ -72,6 +73,7 @@ New-Item -ItemType Directory -Path .\inputs -Force
 ~~~powershell
 .\Build.ps1 -IncludeTestTools
 node .\work\segmented-20261109\field-safety-tests.mjs
+node .\work\segmented-20261109\split-title-tests.mjs
 python -B .\tests\test_portability.py
 ~~~
 

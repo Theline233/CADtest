@@ -25,6 +25,7 @@ public static class Engine
     // 与引擎默认限制一致，提前在界面里拦截，避免整批被拒绝
     public const int MaxFiles = 20;
     public const double MaxFileMiB = 64, MaxBatchMiB = 256;
+    internal const string NoDetailsMessage = "图纸已读入，但未提取到明细。请对照原图检查标题栏。";
 
     static string SegmentedDir => Path.Combine(Root, @"work\segmented-20261109");
     static string AccuracyDir => Path.Combine(Root, @"work\accuracy-20261109");
@@ -431,7 +432,13 @@ public static class Engine
         }
         var review = Path.Combine(outputDir, "review");
         if (run.ExitCode == 0 && File.Exists(Path.Combine(review, "source.json")) && File.Exists(Path.Combine(review, "图纸复核.xlsx")))
-            return new(true, review, "识别完成");
+        {
+            using var source = File.OpenRead(Path.Combine(review, "source.json"));
+            using var data = JsonDocument.Parse(source);
+            bool empty = data.RootElement.TryGetProperty("items", out var items) &&
+                items.ValueKind == JsonValueKind.Array && items.GetArrayLength() == 0;
+            return new(true, review, empty ? NoDetailsMessage : "识别完成");
+        }
         return new(false, review, Diagnose(outputDir, run));
     }
 

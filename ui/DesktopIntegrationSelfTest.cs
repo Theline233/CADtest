@@ -15,6 +15,49 @@ public static class DesktopIntegrationSelfTest
 {
     const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    // Real import handlers with an empty DWG fixture and a known readable DWG.
+    public static async Task<int> RunRecognitionAsync(string output, string empty, string nonempty)
+    {
+        if (Directory.Exists(output)) throw new ArgumentException("Use a new output directory.");
+        Directory.CreateDirectory(output);
+        Engine.SessionsRoot = Path.Combine(output, "sessions");
+        var dialogs = new List<(string Text, string Title)>();
+        var window = new MainWindow(false, (text,title,_,_) =>
+            { dialogs.Add((text,title)); return MessageBoxResult.OK; }, null)
+        { Left=-20000, Top=-20000, ShowActivated=false, ShowInTaskbar=false, WindowStartupLocation=WindowStartupLocation.Manual };
+        string Label(string name) => ((TextBlock)window.FindName(name)).Text;
+        var checks = new List<string>();
+        void Check(string label, bool condition)
+        {
+            checks.Add((condition ? "PASS " : "FAIL ") + label);
+            if (!condition) throw new InvalidOperationException(label);
+        }
+        try
+        {
+            window.Show();
+            await window.ImportDrawingsAsync([empty]);
+            Check("empty import reports no details", Label("StatusText")==Engine.NoDetailsMessage && dialogs.Count==0);
+            Check("empty task retains visible warning and is not marked processed",
+                Label("WorkflowHint")==Engine.NoDetailsMessage && window.ActiveTaskSummary=="未提取到明细");
+            await window.RenderToPngAsync(Path.Combine(output,"empty-import.png"));
+            // These two small fixtures fit within 1 GiB per worker; keep the
+            // coordinator's normal system reserve, lock and admission checks.
+            await window.ImportDrawingsAsync([nonempty,empty], ParallelRecognition.Limits() with { MemoryMiB=1024 });
+            Check("mixed batch completes both and identifies the empty drawing",
+                Label("StatusText").Contains("已完成 2 / 2") && Label("StatusText").Contains("其中 1 张") &&
+                dialogs.Count==1 && dialogs[0].Title=="识别结果" &&
+                dialogs[0].Text.Contains("未提取到明细，请对照原图：\n"+Path.GetFileName(empty)));
+            return 0;
+        }
+        catch (Exception ex) { checks.Add("ERROR " + ex); return 1; }
+        finally
+        {
+            window.Close();
+            File.WriteAllLines(Path.Combine(output,"recognition-checks.txt"),
+                checks.Concat(dialogs.Select(d=>"DIALOG "+d.Title+": "+d.Text)));
+        }
+    }
+
     public static async Task<int> RunAsync(string output, IReadOnlyList<string> reviews)
     {
         if (Directory.Exists(output) || reviews.Count != 3) throw new ArgumentException("Use a new output and exactly three synthetic reviews.");

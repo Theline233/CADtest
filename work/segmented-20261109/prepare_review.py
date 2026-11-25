@@ -214,6 +214,10 @@ def main():
                 if len(row.get('quantity_candidate_unit_options',[]))>1:notes.append('单位候选：'+' / '.join(row['quantity_candidate_unit_options']))
                 if row.get('treatment') is None and row.get('treatment_candidates'):notes.append('已读出的工艺候选（请核对原文）：'+' / '.join(row['treatment_candidates']))
                 association=row.get('field_association_evidence',[])
+                if any(a.get('style')=='same_sheet_bom_scope_unconfirmed' for a in association):
+                    notes.append('零件表数量原文仅供参考，请确认本次报价数量和单位')
+                if any(a.get('style')=='same_sheet_bom_identity_conflict' for a in association):
+                    notes.append('零件表名称或编号与本图不符，未采用该表的字段；请核对图号及报价范围')
                 def association_values(entry):
                     evidence=entry.get('candidates',[])+entry.get('reviewTexts',[])+entry.get('quantityContext',[])
                     parts=[]

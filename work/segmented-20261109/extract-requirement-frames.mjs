@@ -108,21 +108,14 @@ const frames=titleLabels.map((anchor,index)=>{
       ...(drawingReviewTexts.length?['图号字段含需复核文字']:[]),
       ...(qtyNumbers.length!==1?['数量非唯一或缺失']:[]),...(materials.length!==1?['材质非唯一或缺失']:[])]};
 });
-// A second title layout places DRAWING/NUMBER in a small label cell, with the
-// drawing identifier in the adjacent cell to its right. Accept this layout
-// only when the native block geometry proves the complete pair of cells.
-// A coordinate window alone could otherwise promote a nearby BOM row.
-function splitDrawingCell(anchor,drawingLabel){
-  const tolerance=0.25;
-  const labelPosition=relative(drawingLabel.position,anchor);
-  if(!labelPosition)return null;
-  const badGeometry=new Set((report.issues??[]).filter(i=>i.kind==='PREVIEW_POLYLINE_BULGE_APPROXIMATION')
-    .map(i=>String(i.message??'').split(' | ')[0]));
+const badGridGeometry=new Set((report.issues??[]).filter(i=>i.kind==='PREVIEW_POLYLINE_BULGE_APPROXIMATION')
+  .map(i=>String(i.message??'').split(' | ')[0]));
+function gridSegments(anchor){
   const horizontal=[],vertical=[];
   for(const g of report.geometry){
     if(g.layout!==anchor.layout||g.dimensionGraphics||
        !(g.blockPath===anchor.blockPath||g.blockPath.startsWith(anchor.blockPath+'/'))||
-       !['Line','LwPolyline'].includes(g.kind)||badGeometry.has(g.id)||!Array.isArray(g.points))continue;
+       !['Line','LwPolyline'].includes(g.kind)||badGridGeometry.has(g.id)||!Array.isArray(g.points))continue;
     const points=g.points.filter(finitePoint);
     if(points.length!==g.points.length)continue;
     const pairs=[];for(let i=1;i<points.length;i++)pairs.push([points[i-1],points[i]]);
@@ -130,10 +123,18 @@ function splitDrawingCell(anchor,drawingLabel){
     for(const [p,q] of pairs){
       const a=relative(p,anchor),b=relative(q,anchor);if(!a||!b)continue;
       const dx=Math.abs(a[0]-b[0]),dy=Math.abs(a[1]-b[1]);
-      if(dy<=0.03&&dx>tolerance)horizontal.push({id:g.id,at:(a[1]+b[1])/2,lo:Math.min(a[0],b[0]),hi:Math.max(a[0],b[0])});
-      else if(dx<=0.03&&dy>tolerance)vertical.push({id:g.id,at:(a[0]+b[0])/2,lo:Math.min(a[1],b[1]),hi:Math.max(a[1],b[1])});
+      if(dy<=0.03&&dx>0.25)horizontal.push({id:g.id,at:(a[1]+b[1])/2,lo:Math.min(a[0],b[0]),hi:Math.max(a[0],b[0])});
+      else if(dx<=0.03&&dy>0.25)vertical.push({id:g.id,at:(a[0]+b[0])/2,lo:Math.min(a[1],b[1]),hi:Math.max(a[1],b[1])});
     }
   }
+  return {horizontal,vertical};
+}
+// Accept the split title only when geometry proves both adjacent cells.
+function splitDrawingCell(anchor,drawingLabel){
+  const tolerance=0.25;
+  const labelPosition=relative(drawingLabel.position,anchor);
+  if(!labelPosition)return null;
+  const {horizontal,vertical}=gridSegments(anchor);
   const minLabelX=Math.min(0,labelPosition[0]),maxLabelX=Math.max(0,labelPosition[0]);
   const minLabelY=Math.min(0,labelPosition[1]),maxLabelY=Math.max(0,labelPosition[1]);
   const crossesLabel=h=>h.lo<=minLabelX+tolerance&&h.hi>=maxLabelX-tolerance;
@@ -149,6 +150,111 @@ function splitDrawingCell(anchor,drawingLabel){
   if([top,bottom].some(h=>h.lo>left.at+tolerance||h.hi<right.at-tolerance))return null;
   return {bounds:[divider.at,bottom.at,right.at,top.at],tolerance,
     borders:{top:top.id,bottom:bottom.id,left:left.id,divider:divider.id,right:right.id}};
+}
+
+// In this imported template the border, the title values and the parts table
+// are separate sibling inserts. Their full import stem (never an ID fallback),
+// parent path and template distinguish them from arbitrary nearby blocks.
+const importSibling=path=>path.match(/^(.*\/INSERT:)[^:]+:(.+)\$0\$(Borders (텔스타 A[13])|Title Blocks (텔스타 A[13])|부품 리스트)$/u);
+function telstarBorder(path){
+  const m=importSibling(path);
+  return m?.[4]?{parent:m[1],stem:m[2],sheet:m[4]}:null;
+}
+function matchesImport(path,owner,role){
+  const m=importSibling(path);
+  return !!(m&&m[1]===owner.parent&&m[2]===owner.stem&&m[3]===role);
+}
+const telstarNumber=text=>/^TL\d{8}-[A-Z0-9]+(?:-[A-Z0-9]+)+$/u.test(text.trim()) ||
+  /^[\p{L}]+(?: +[\p{L}]+)*-\d+$/u.test(text.trim());
+const normalizedPart=text=>text.normalize('NFKC').trim().replace(/ +/g,' ').toUpperCase();
+function nameAfterIdentifier(text,number,importStem=false){
+  const value=text.trim().replace(/\.ipt$/i,'');
+  // Some title numbers are updated from TA to TL while the original CAD
+  // import and the row keep TA. Only correlate the identical numeric stem;
+  // the exported number always remains the literal in the title cell.
+  const numeric=number.match(/^T[AL](\d{8}-\d+-\d+)$/);
+  const escape=s=>s.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const pattern=numeric?'T[AL]'+escape(numeric[1]):number.split(/[ -]+/u).map(escape).join('[ -]+');
+  const separator=importStem&&numeric?'(?: +|(?=\\p{L}))':' +';
+  const m=value.match(new RegExp('^'+pattern+'(?:'+separator+'(.+))?$','iu'));
+  return m?(m[1]??'').trim():null;
+}
+
+// Read only a one-row, grid-proven table belonging to this sheet, and only
+// when the row identifies the sheet itself rather than one of its children.
+// Quantities from either BOM column are evidence, not order quantities.
+function telstarDetail(anchor,owner,bounds,number){
+  const none={};
+  const headers=texts.filter(t=>t.layout===anchor.layout&&inside(t.position,bounds)&&
+    t.text.trim()==='PART NAME STANDARD'&&matchesImport(t.blockPath,owner,'부품 리스트'));
+  if(headers.length!==1||headers[0].textRequiresReview)return none;
+  const header=headers[0];
+  const {horizontal,vertical}=gridSegments(header);
+  const tolerance=0.15;
+  const spans=horizontal.filter(h=>h.lo<0&&h.hi>0);
+  const below=spans.filter(h=>h.at< -tolerance).sort((a,b)=>b.at-a.at);
+  const above=spans.filter(h=>h.at>tolerance).sort((a,b)=>a.at-b.at);
+  const bottom=below[0],top=above[0];
+  if(!bottom||!top||Math.abs(top.lo-bottom.lo)>tolerance||Math.abs(top.hi-bottom.hi)>tolerance)return none;
+  const across=h=>Math.abs(h.lo-bottom.lo)<=tolerance&&Math.abs(h.hi-bottom.hi)<=tolerance;
+  const up=above.slice(1).filter(across),down=below.slice(1).filter(across);
+  if(Boolean(up.length)===Boolean(down.length))return none;
+  const follows=up.length?up:down;
+  const [rowBottom,rowTop]=up.length?[top,up[0]]:[down[0],bottom];
+  function walls(lower,upper){
+    return [...new Set(vertical.filter(v=>v.lo<=lower.at+tolerance&&v.hi>=upper.at-tolerance&&
+      v.at>=bottom.lo-tolerance&&v.at<=bottom.hi+tolerance).map(v=>v.at))].sort((a,b)=>a-b);
+  }
+  const lowWalls=walls(bottom,top),highWalls=walls(rowBottom,rowTop);
+  if(lowWalls.length!==7||highWalls.length!==7||lowWalls.some((x,i)=>Math.abs(x-highWalls[i])>tolerance)||
+      Math.abs(lowWalls[0]-bottom.lo)>tolerance||Math.abs(lowWalls.at(-1)-bottom.hi)>tolerance)return none;
+  const local=texts.filter(t=>t.layout===header.layout&&t.text.trim()&&inside(t.position,bounds))
+    .map(t=>({t,p:relative(t.position,header)})).filter(e=>e.p);
+  function readCell(i,lower,upper){
+    const left=lowWalls[i],right=lowWalls[i+1];
+    // Text baselines can be very close to a column edge; unlike grid joins,
+    // the text position is a native point and needs only a narrow edge guard.
+    const edge=0.015;
+    const entries=local.filter(({p:[x,y]})=>x>=left-edge&&x<=right+edge&&
+      y>=lower.at-edge&&y<=upper.at+edge);
+    if(entries.length!==1)return null;
+    const [{t,p:[x,y]}]=entries;
+    return !t.textRequiresReview&&t.blockPath===header.blockPath&&x>left+edge&&x<right-edge&&
+      y>lower.at+edge&&y<upper.at-edge?t:null;
+  }
+  const captions=['NO.','PART NAME STANDARD',"MAT'L","Q'TY","T'Q'TY",'REMARKS'];
+  if(captions.some((caption,i)=>{
+    const t=readCell(i,bottom,top)?.text.trim();
+    return t!==caption&&!(i===0&&t==='순');
+  }))return none;
+  if(follows.length>1)return {kind:'assembly_title'};
+  const item=readCell(1,rowBottom,rowTop);
+  if(!item||!/^\d+$/.test(readCell(0,rowBottom,rowTop)?.text.trim()??''))return none;
+  const sourceName=nameAfterIdentifier(owner.stem,number,true);
+  const name=nameAfterIdentifier(item.text,number);
+  if(!name||sourceName===null||(sourceName&&normalizedPart(sourceName)!==normalizedPart(name)))
+    return {identityConflict:{text:item.text,id:item.id}};
+  const material=readCell(2,rowBottom,rowTop);
+  const quantities=[3,4].flatMap(i=>{
+    const token=readCell(i,rowBottom,rowTop);
+    return token?[{text:captions[i]+': '+token.text.trim(),id:token.id}]:[];
+  });
+  return {name:{text:name,id:item.id},material:material?{text:material.text.trim(),id:material.id}:null,
+    quantityContext:quantities,tablePath:header.blockPath};
+}
+function telstarAssemblyName(labels,title){
+  const detail=labels.filter(t=>!t.textRequiresReview&&t.text.trim()==='DETAIL');
+  if(detail.length!==1)return null;
+  const label=detail[0], cell=splitDrawingCell(label,label);
+  if(!cell)return null;
+  const candidates=texts.filter(t=>{
+    if(t.layout!==label.layout||!t.text.trim())return false;
+    const p=relative(t.position,label);
+    return p&&inside(p,cell.bounds);
+  });
+  if(candidates.length!==1)return null;
+  const [name]=candidates;
+  return !name.textRequiresReview&&name.blockPath===title.blockPath?{text:name.text.trim(),id:name.id}:null;
 }
 const splitDiagnostics=[];
 for(const anchor of texts.filter(t=>t.text.trim().toUpperCase()==='NUMBER')){
@@ -190,7 +296,6 @@ for(const anchor of texts.filter(t=>t.text.trim().toUpperCase()==='NUMBER')){
     continue;
   }
   const parentPath=anchor.blockPath.slice(0,anchor.blockPath.lastIndexOf('/INSERT:'));
-  const ownedText=t=>t.blockPath===parentPath||t.blockPath===anchor.blockPath||t.blockPath.startsWith(anchor.blockPath+'/');
   const inCell=t=>{
     if(t.layout!==anchor.layout)return false;
     const p=relative(t.position,anchor);if(!p)return false;
@@ -198,7 +303,10 @@ for(const anchor of texts.filter(t=>t.text.trim().toUpperCase()==='NUMBER')){
       p[1]>=cell.bounds[1]-cell.tolerance&&p[1]<=cell.bounds[3]+cell.tolerance;
   };
   const cellTexts=texts.filter(t=>inCell(t)&&t.text.trim());
-  const drawingCandidates=cellTexts.filter(t=>!t.textRequiresReview&&isDrawingText(t.text));
+  const owner=telstarBorder(anchor.blockPath);
+  const inTitle=t=>owner&&matchesImport(t.blockPath,owner,'Title Blocks '+owner.sheet);
+  const ownedText=t=>t.blockPath===parentPath||t.blockPath===anchor.blockPath||t.blockPath.startsWith(anchor.blockPath+'/')||inTitle(t);
+  const drawingCandidates=cellTexts.filter(t=>!t.textRequiresReview&&(isDrawingText(t.text)||(inTitle(t)&&telstarNumber(t.text))));
   const insideCell=t=>{const p=relative(t.position,anchor);return p&&p[0]>cell.bounds[0]+cell.tolerance&&
     p[0]<cell.bounds[2]-cell.tolerance&&p[1]>cell.bounds[1]+cell.tolerance&&p[1]<cell.bounds[3]-cell.tolerance;};
   const duplicateLabels=samePath.filter(t=>t.text.trim().toUpperCase()==='NUMBER').length!==1||paired.length!==1;
@@ -225,19 +333,29 @@ for(const anchor of texts.filter(t=>t.text.trim().toUpperCase()==='NUMBER')){
   for(const g of report.geometry)if(g.layout===anchor.layout&&(g.blockPath===anchor.blockPath||g.blockPath.startsWith(anchor.blockPath+'/')))
     for(const p of g.points)if(finitePoint(p)){bounds[0]=Math.min(bounds[0],p[0]);bounds[1]=Math.min(bounds[1],p[1]);bounds[2]=Math.max(bounds[2],p[0]);bounds[3]=Math.max(bounds[3],p[1]);}
   const treatmentDetails={...extractTreatment([]),status:'not_assessed',issues:['alternative_title_fields_unresolved']};
+  const pairedTitle=resolved&&inTitle(drawingCandidates[0]);
+  const drawingNumber=resolved?(pairedTitle?drawingCandidates[0].text.trim():drawingKey(drawingCandidates[0].text)):null;
+  const detail=pairedTitle?telstarDetail(anchor,owner,bounds,drawingNumber):{};
+  const assemblyName=detail.kind==='assembly_title'?telstarAssemblyName(samePath,drawingCandidates[0]):null;
   const issueCodes=['alternative_title_fields_unresolved',...(duplicateLabels?['drawing_title_labels_ambiguous']:[]),
     ...(foreignTexts.length?['drawing_number_cell_foreign_block']:[]),
     ...(!resolved?['drawing_number_cell_unresolved']:[])];
   frames.push({index:frames.length+1,framePath:anchor.blockPath,layout:anchor.layout,bounds:bounds.every(Number.isFinite)?bounds:null,
-    drawingNumber:resolved?drawingKey(drawingCandidates[0].text):null,
-    drawingCandidates:drawingCandidates.map(t=>({text:t.text,id:t.id})),names:[],materials:[],
+    drawingNumber,
+    drawingCandidates:drawingCandidates.map(t=>({text:t.text,id:t.id})),
+    names:detail.name?[detail.name]:assemblyName?[assemblyName]:[],materials:detail.material?[detail.material]:[],
     quantity:null,quantityUnit:'',quantityEvidence:[],quantityContext:[],quantityLabelEvidence:[],
     surfaceTreatment:null,treatmentCandidates:[],treatmentDetails,treatmentIssues:treatmentDetails.issues,
-    treatmentRuleVersion:treatmentDetails.rule_version,treatmentEvidence:[],specialNotes:[],subparts:[],recordKind:'part_title',
-    fieldScopes:{drawingNumber:'drawing_number_cell',name:'unresolved',material:'unresolved',quantity:'unresolved',treatment:'unresolved'},
+    treatmentRuleVersion:treatmentDetails.rule_version,treatmentEvidence:[],specialNotes:[],subparts:[],recordKind:detail.kind??'part_title',
+    fieldScopes:{drawingNumber:'drawing_number_cell',name:detail.name?'same_sheet_part_cell':assemblyName?'assembly_detail_cell':'unresolved',
+      material:detail.material?'same_sheet_material_cell':'unresolved',quantity:'unresolved',treatment:'unresolved'},
     fieldIssues:issueCodes,fieldAssociationEvidence:[{field:'drawingNumber',style:'DRAWING_NUMBER',
-      numberLabel:{id:anchor.id,text:anchor.text},drawingLabels:paired.map(t=>({id:t.id,text:t.text})),cell,candidates:evidence}],
-    issues:[...(!resolved?['图号非唯一或缺失']:[]),'名称、材质、数量及工艺范围待核']});
+      numberLabel:{id:anchor.id,text:anchor.text},drawingLabels:paired.map(t=>({id:t.id,text:t.text})),cell,candidates:evidence},
+      ...(detail.quantityContext?.length?[{field:'quantity',style:'same_sheet_bom_scope_unconfirmed',
+        tablePath:detail.tablePath,candidates:detail.quantityContext}]:[]),
+      ...(detail.identityConflict?[{field:'name',style:'same_sheet_bom_identity_conflict',candidates:[detail.identityConflict]}]:[])],
+    issues:[...(!resolved?['图号非唯一或缺失']:[]),
+      ...(pairedTitle?['数量及工艺范围待核']:['名称、材质、数量及工艺范围待核'])]});
   frameLabelSelections.push({material:null,quantity:null,name:null});
   frameReviewSelections.push({material:[],quantity:[],name:[]});
 }

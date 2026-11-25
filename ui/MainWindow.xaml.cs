@@ -544,7 +544,7 @@ public partial class MainWindow : Window
     }
 
     // File picker and drag-and-drop share admission and the same queue.
-    internal async Task ImportDrawingsAsync(IReadOnlyList<string> selected)
+    internal async Task ImportDrawingsAsync(IReadOnlyList<string> selected, ParallelLimits? parallelLimits = null)
     {
         if (_isDemo || _busy || _runCts != null || _recentRemoving) return;
         if (!SaveBeforeLeaving("导入图纸")) return;
@@ -582,6 +582,7 @@ public partial class MainWindow : Window
         _runCts = new CancellationTokenSource();
         var cts = _runCts;
         var failures = new List<string>();
+        var emptyDrawings = new List<string>();
         string? firstOpened = null;
         int succeeded = 0;
         bool cancelled = false;
@@ -600,7 +601,8 @@ public partial class MainWindow : Window
             {
                 usedParallel = true;
                 _parallelRunActive = true;
-                var result = await ImportParallelAsync(drawings, capability, failures, cts.Token);
+                var result = await ImportParallelAsync(drawings, capability, failures, emptyDrawings,
+                    parallelLimits ?? ParallelRecognition.Limits(), cts.Token);
                 succeeded = result.Succeeded;
                 firstOpened = result.FirstOpened;
             }
@@ -636,6 +638,7 @@ public partial class MainWindow : Window
                         continue;
                     }
                     if (!TryOpenTask(result.ReviewFolder)) { failures.Add(name + "：识别完成，但无法打开复核任务。"); continue; }
+                    if (HasNoDetails(result.ReviewFolder)) emptyDrawings.Add(name);
                     firstOpened ??= result.ReviewFolder;
                     succeeded++;
                 }
@@ -656,18 +659,26 @@ public partial class MainWindow : Window
         }
         if (firstOpened != null && (!usedParallel || _task == null)) TryOpenTask(firstOpened);
         string summary = $"已完成 {succeeded} / {drawings.Count} 张图纸。";
+        if (emptyDrawings.Count > 0)
+            summary = drawings.Count == 1 ? Engine.NoDetailsMessage :
+                summary + $" 其中 {emptyDrawings.Count} 张已读入但未提取到明细。";
         if (cancelled) summary += " 已取消剩余识别，已完成的任务仍保留。";
-        if (failures.Count > 0)
-            _showDialog(summary + "\n\n未完成：\n" + string.Join("\n", failures),
-                "部分图纸未完成", MessageBoxButton.OK, MessageBoxImage.Warning);
-        Status(summary);
+        if (failures.Count > 0 || (drawings.Count > 1 && emptyDrawings.Count > 0))
+        {
+            string report = summary;
+            if (failures.Count > 0) report += "\n\n未完成：\n" + string.Join("\n", failures);
+            if (emptyDrawings.Count > 0) report += "\n\n未提取到明细，请对照原图：\n" + string.Join("\n", emptyDrawings);
+            _showDialog(report, "识别结果", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        Status(summary, toast: emptyDrawings.Count == 0);
     }
 
+    bool HasNoDetails(string review) => _sessionCache.TryGetValue(Path.GetFullPath(review), out var task) && task.Items.Count == 0;
+
     async Task<(int Succeeded, string? FirstOpened)> ImportParallelAsync(IReadOnlyList<string> drawings,
-        ParallelCapability capability, List<string> failures, CancellationToken ct)
+        ParallelCapability capability, List<string> failures, List<string> emptyDrawings, ParallelLimits limits, CancellationToken ct)
     {
         int maxParallel = new RecognitionSettingsStore().Load();
-        var limits = ParallelRecognition.Limits();
         AppendLog($"批量资源：每任务内存上限 {limits.MemoryMiB} MiB，整机 CPU 预算 {limits.CpuPercent}%，单阶段超时 {limits.TimeoutSeconds} 秒；" +
             (maxParallel == 0 ? "并行数自动。" : $"最多同时 {maxParallel} 张。"));
         var staged = new List<string>();
@@ -712,6 +723,7 @@ public partial class MainWindow : Window
                     }
                     bool ok = firstOpened == null ? TryOpenTask(review) : RegisterCompletedTab(review);
                     if (!ok) { failures.Add(name + "：识别完成，但无法打开复核任务：" + review); continue; }
+                    if (HasNoDetails(review)) emptyDrawings.Add(name);
                     firstOpened ??= review;
                     opened++;
                     // Keep the progress/cancel panel available while allowing the
@@ -942,11 +954,11 @@ public partial class MainWindow : Window
         UpdateStats();
         if (fromCache)
         {
-            Status("已切换到 " + tab.DisplayName, toast: false);
+            Status(task.Items.Count == 0 ? Engine.NoDetailsMessage : "已切换到 " + tab.DisplayName, toast: false);
             return true;
         }
         int crossedDefaults = task.Items.Count(r => r.IsCrossedOut && r.Mode == Rules.Exclude);
-        var loadStatus = task.LoadNote ?? (hadSaved ? "已载入上次保存的复核内容" :
+        var loadStatus = task.LoadNote ?? (task.Items.Count == 0 ? Engine.NoDetailsMessage : hadSaved ? "已载入上次保存的复核内容" :
             crossedDefaults > 0 ? $"已载入识别结果；{crossedDefaults} 条图面打X的明细默认不纳入，其余待复核。" : "已载入识别结果，所有明细均待复核");
         Status(loadStatus + (recentError == null ? "" : "；最近任务列表未更新：" + recentError), toast: false);
 
@@ -1225,7 +1237,7 @@ public partial class MainWindow : Window
         ReviewProgress.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty,
             new System.Windows.Media.Animation.DoubleAnimation(total == 0 ? 0 : (double)done / total, TimeSpan.FromMilliseconds(500))
             { EasingFunction = SmoothEase });
-        ProgressText.Text = $"已处理 {done} / {total}";
+        ProgressText.Text = total == 0 ? "未提取到明细" : $"已处理 {done} / {total}";
         ProgressPercent.Text = total == 0 ? "" : $"{Math.Round(100.0 * done / total)}%";
         // 胶囊上的数字按当前图纸范围计算，不受搜索影响。
         var scope = FileList.SelectedItem is FileRow f ? _task.Items.Where(i => i.FileId == f.Id).ToList() : _task.Items.ToList();
@@ -1247,7 +1259,8 @@ public partial class MainWindow : Window
             FileList.SelectedItem is FileRow f ? f.Name + " · " : $"{_task.Files.Count} 张图纸 · ";
         StatsText.Text = $"{scope}共 {_task.Items.Count} 条" + (shown == _task.Items.Count ? "" : $"，显示 {shown} 条");
         ActiveTaskSummary = (_task.Files.Count > 1 ? $"{_task.Files.Count} 张图纸 · " : "") +
-            $"{_task.Items.Count} 条 · " + (c.Pending == 0 ? "已全部处理" : $"待复核 {c.Pending}");
+            (_task.Items.Count == 0 ? "未提取到明细" : $"{_task.Items.Count} 条 · " +
+                (c.Pending == 0 ? "已全部处理" : $"待复核 {c.Pending}"));
     }
 
     // 侧栏“已打开的图纸”中选中项下方显示的摘要。
@@ -1270,6 +1283,11 @@ public partial class MainWindow : Window
     void UpdateWorkflowHint()
     {
         if (_task == null || WorkflowHint == null) return;
+        if (_task.Items.Count == 0)
+        {
+            WorkflowHint.Text = Engine.NoDetailsMessage;
+            return;
+        }
         var excluded = _task.Files.Where(f => f.State == "不纳入本次").Select(f => f.Id).ToHashSet();
         int pending = _task.Items.Count(i => i.Mode == Rules.Pending && !excluded.Contains(i.FileId));
         var filesWithItems = _task.Items.Select(i => i.FileId).ToHashSet();
