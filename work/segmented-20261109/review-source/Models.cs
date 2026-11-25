@@ -27,6 +27,8 @@ public sealed class ValidationResult
     public List<ExcludedItem> Excluded {get;}=[];
     public List<FileDecision> Files {get;}=[];
     public List<TreatmentException> TreatmentExceptions {get;}=[];
+    public List<QuantityHandoff> QuantityHandoffs {get;}=[];
+    public string? BlankQuantityApprovedReviewSha256 {get;set;}
     public string? BlankTreatmentApprovedReviewSha256 {get;set;}
     public int Pending {get;set;}
 }

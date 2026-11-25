@@ -1507,8 +1507,9 @@ public partial class MainWindow : Window
         static bool DefaultCrossedExclusion(ItemRow r) => r.IsCrossedOut && r.Mode == Rules.Exclude &&
             string.Equals(r.Note.Trim(), r.Src.DefaultDecision?.Note?.Trim(), StringComparison.Ordinal);
         bool CanAdopt(ItemRow r) => r.IsCompleteOriginal ||
-            (_task?.Kind == EngineKind.Segmented && !r.IsCrossedOut && Rules.HardFieldsComplete(r.Src.Cad) &&
-             TreatmentPolicy.NeedsBlankApproval(TreatmentPolicy.Classify(r.OrigTreatment, null, r.Warnings, r.TreatmentEvidence)));
+            (_task?.Kind == EngineKind.Segmented && !r.IsCrossedOut &&
+             TreatmentPolicy.Classify(r.OrigTreatment, null, r.Warnings, r.TreatmentEvidence) != TreatmentPolicy.Conflict &&
+             (Rules.HardFieldsComplete(r.Src.Cad) || Rules.CanDeferQuantity(r.Src.Cad)));
         var ok = rows.Where(r => CanAdopt(r) && r.Mode != Rules.Revise &&
             (r.Mode != Rules.Exclude || DefaultCrossedExclusion(r))).ToList();
         int revised = rows.Count(r => r.Mode == Rules.Revise);
@@ -1721,8 +1722,9 @@ public partial class MainWindow : Window
         if (entry.ItemId != null && text.Contains("尚未复核"))
             return "这条明细还未核对：请核对原图，并选择采用图纸、人工修订或不纳入。";
         if (entry.ItemId != null && text.Contains("仍有缺值"))
-            return "这条明细仍有缺项：请对照原图，直接在表格中补充图号、数量、单位、材质" +
-                (_task?.Kind == EngineKind.Accuracy ? "或工艺。" : "。");
+            return _task?.Kind == EngineKind.Accuracy
+                ? "这条明细仍有缺项：请对照原图补充图号、数量、单位、材质或工艺。"
+                : "这条明细缺少图号或材质，请对照原图补充。";
         if (entry.ItemId != null && text.Contains("必须填写复核说明"))
             return "这条明细仍需处理，请对照原图检查并在表格中修改，或选择处理方式。";
         if (entry.ItemId != null && text.Contains("不纳入须说明原因"))
@@ -1741,8 +1743,10 @@ public partial class MainWindow : Window
             case "ready":
                 string treatment = dto.TreatmentExceptions.Count == 0 ? "" :
                     $"\n其中 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认，导出时须另行确认。";
+                string quantity = dto.QuantityHandoffs.Count == 0 ? "" :
+                    $"\n其中 {dto.QuantityHandoffs.Count} 条的数量或单位可留空，到 Excel 补填。";
                 Status($"校验通过：可导出 {dto.Accepted.Count} 条，排除 {dto.Excluded.Count} 条");
-                MessageBox.Show(this, $"校验通过。\n将纳入 {dto.Accepted.Count} 条明细，另有 {dto.Excluded.Count} 条被排除。{treatment}", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, $"校验通过。\n将纳入 {dto.Accepted.Count} 条明细，另有 {dto.Excluded.Count} 条被排除。{quantity}{treatment}", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
                 break;
             case "nothing_to_export":
                 Status("校验通过，但所有明细都被排除，没有可导出的内容");
@@ -1913,8 +1917,9 @@ public partial class MainWindow : Window
         catch { chosen?.Dispose(); throw; }
     }
 
-    static bool CanPreviewAdopt(ItemRow row, ISet<string> excludedFiles) =>
+    bool CanPreviewAdopt(ItemRow row, ISet<string> excludedFiles) =>
         !excludedFiles.Contains(row.FileId) && (DuplicateQuantity.CanProposeDefault(row) ||
+        (_task?.Kind == EngineKind.Segmented && Rules.CanPreviewQuantityHandoff(row)) ||
         (!row.IsCrossedOut && row.Mode == Rules.Pending && row.IsCompleteOriginal && !row.HasOverride &&
         row.Src.RequiresReviewSpecified && !row.Src.RequiresReview && row.Src.WarningsSpecified && string.IsNullOrWhiteSpace(row.Warnings) &&
         string.IsNullOrWhiteSpace(row.Note)));
@@ -2093,7 +2098,8 @@ public partial class MainWindow : Window
 
     static string DecisionSignature(ValidationDto dto) =>
         string.Join("\n", dto.Accepted.Select(item => item.GetRawText())) + "\n--EXCLUDED--\n" +
-        string.Join("\n", dto.Excluded.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal));
+        string.Join("\n", dto.Excluded.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal)) +
+        "\n--QUANTITY--\n" + JsonSerializer.Serialize(dto.QuantityHandoffs, Json.Options);
 
     static bool HasCompleteDecisionCoverage(TaskSession task, ValidationDto dto)
     {
@@ -2232,6 +2238,13 @@ public partial class MainWindow : Window
             if (dto.TreatmentExceptions.Count > 0)
                 scope = $"有 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认；本次还会单独询问是否留空导出。" +
                     Environment.NewLine + Environment.NewLine + scope;
+            if (dto.QuantityHandoffs.Count > 0)
+            {
+                string examples = string.Join("、", dto.QuantityHandoffs.Take(8).Select(x => $"{x.DrawingNumber}（{x.MissingLabel}）"));
+                string more = dto.QuantityHandoffs.Count > 8 ? " 等" : "";
+                scope = $"有 {dto.QuantityHandoffs.Count} 条明细的数量或单位待补。确认后只留空缺失字段，请在 Excel 补填，再用于报价。"+
+                    Environment.NewLine + examples + more + Environment.NewLine + Environment.NewLine + scope;
+            }
             int duplicateSums = task.Items.Count(i => proposed.Contains(i.Id) && DuplicateQuantity.CanProposeSum(i));
             if (duplicateSums > 0)
                 scope = $"确认后将批量采用 {duplicateSums} 条重复图号的默认累加数量；请逐条核对以下各处图框及计入范围。" +
@@ -2360,7 +2373,8 @@ public partial class MainWindow : Window
         try
         {
             folder = ExportFolderFactory();
-            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!, allowBlankTreatmentFor: allowBlankTreatmentFor);
+            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!, allowBlankTreatmentFor: allowBlankTreatmentFor,
+                allowBlankQuantityFor: dto.QuantityHandoffs.Count == 0 ? null : dto.ReviewSha256);
             if (exported.Status != "ready" || !File.Exists(Path.Combine(folder, "确认明细.xlsx")))
                 throw new IOException("引擎没有完成导出：" + (exported.Error ?? string.Join("\n", exported.Errors.Take(5))));
             if (!string.Equals(exported.ReviewSha256, dto.ReviewSha256, StringComparison.OrdinalIgnoreCase))
@@ -2381,7 +2395,9 @@ public partial class MainWindow : Window
         }
         finally { SetBusy(false); }
         Status(receiptFailure == null ? "已导出：" + destination.Path : "文件已保存，但内部保存记录写入失败。");
-        string resultMessage = $"已导出 {exported.Accepted.Count} 条确认明细（排除 {exported.Excluded.Count} 条）。\n\n{destination.Path}" +
+        string resultMessage = $"已导出 {exported.Accepted.Count} 条明细（排除 {exported.Excluded.Count} 条）。" +
+            (exported.QuantityHandoffs.Count == 0 ? "" : $"\n其中 {exported.QuantityHandoffs.Count} 条的数量或单位待补，请在 Excel 填写。") +
+            $"\n\n{destination.Path}" +
             (backup == null ? "" : "\n\n替换前文件备份：" + backup);
         _lastExportedPath = destination.Path;
         _lastExportWarning = receiptFailure;

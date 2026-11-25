@@ -23,11 +23,14 @@ try
     {
         ReviewWorkbooks.Prepare(Need("input"),Need("output"));
     }
-    else if(args[0] is "validate" or "export" or "validate-v1" or "export-v1")
+    else if(args[0] is "validate" or "export" or "validate-v1" or "export-v1" or "validate-v2" or "export-v2")
     {
-        var result=args[0] is "export" or "export-v1"
-            ?ReviewWorkbooks.Export(Need("manifest"),Need("review"),Need("output"),Need("reviewer"),parameters.GetValueOrDefault("allow-blank-treatment-for"))
-            :ReviewWorkbooks.Validate(Need("manifest"),Need("review"));
+        bool quantityHandoff=args[0] is "validate-v2" or "export-v2";
+        var result=args[0].StartsWith("export",StringComparison.Ordinal)
+            ?ReviewWorkbooks.Export(Need("manifest"),Need("review"),Need("output"),Need("reviewer"),
+                parameters.GetValueOrDefault("allow-blank-treatment-for"), quantityHandoff,
+                parameters.GetValueOrDefault("allow-blank-quantity-for"))
+            :ReviewWorkbooks.Validate(Need("manifest"),Need("review"),quantityHandoff);
         Console.WriteLine(JsonData.Text(result));
         Environment.ExitCode=result.Status is "ready" or "nothing_to_export"?0:2;
     }

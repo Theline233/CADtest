@@ -148,8 +148,7 @@ public static class ReviewWorkbooks
         else if(Text(cell)!=(Convert.ToString(value,CultureInfo.InvariantCulture)??"").Trim())throw new InvalidDataException("Source value changed at "+cell.Address);
     }
     static bool Meaningful(string? s)=>!string.IsNullOrWhiteSpace(s)&&!Unknown.Contains(s.Trim(),StringComparer.OrdinalIgnoreCase);
-    static bool Complete(CadValues c)=>Meaningful(c.DrawingNumber)&&c.Quantity.HasValue&&c.Quantity>=0&&Meaningful(c.Unit)&&Meaningful(c.Material);
-    public static ValidationResult Validate(string manifest,string review)
+    public static ValidationResult Validate(string manifest,string review,bool allowQuantityHandoff=false)
     {
         manifest=SafePath(manifest);review=SafePath(review);CheckArchive(review);
         var result=new ValidationResult();var data=JsonData.Read<ReviewDataset>(manifest);VerifyDataset(data);result.TaskId=data.TaskId;
@@ -191,7 +190,13 @@ public static class ReviewWorkbooks
             if(mode=="采用图纸"&&hasOverride){result.Errors.Add(id+": 采用图纸时不可混入修订值，请选择人工修订");continue;}
             string? Override(string value,string? sourceValue)=>value==""?sourceValue:value;
             var final=mode=="采用图纸"?original.Cad:new CadValues(Override(fields[0],original.Cad.DrawingNumber)!,Override(fields[1],original.Cad.Name),Override(fields[2],original.Cad.Material),Override(fields[3],original.Cad.Treatment),quantity??original.Cad.Quantity,Override(fields[5],original.Cad.Unit));
-            if(!Complete(final)){result.Errors.Add(id+": 图号/数量/单位/材质仍有缺值或未确定内容");continue;}
+            if(!Meaningful(final.DrawingNumber)||!Meaningful(final.Material))
+            { result.Errors.Add(id+": 图号或材质仍有缺值或未确定内容");continue; }
+            if(final.Quantity<0)
+            { result.Errors.Add(id+": 确认数量不能为负数");continue; }
+            bool quantityBlank=final.Quantity is null, unitBlank=!Meaningful(final.Unit);
+            if(!allowQuantityHandoff&&(quantityBlank||unitBlank))
+            { result.Errors.Add(id+": 数量或单位仍有缺值或未确定内容");continue; }
             var treatment=TreatmentPolicy.Classify(original.Cad.Treatment,mode=="人工修订"?fields[3]:null,original.Warnings,original.TreatmentEvidence);
             if(treatment==TreatmentPolicy.Conflict){result.Errors.Add(id+": 表面处理冲突或适用范围未核对，请明确工艺后再导出");continue;}
             if((original.RequiresReview||mode=="人工修订")&&!Meaningful(note)){result.Errors.Add(id+": 异议或修订必须填写复核说明");continue;}
@@ -200,6 +205,11 @@ public static class ReviewWorkbooks
             if(TreatmentPolicy.NeedsBlankApproval(treatment))
                 result.TreatmentExceptions.Add(new(id,original.FileId,final.DrawingNumber,treatment));
             if(treatment!=TreatmentPolicy.Confirmed)final=final with {Treatment=null};
+            if(quantityBlank||unitBlank)
+            {
+                result.QuantityHandoffs.Add(new(id,original.FileId,final.DrawingNumber,quantityBlank,unitBlank));
+                if(unitBlank)final=final with {Unit=null};
+            }
             result.Accepted.Add(new(id,original.FileId,mode,original.Cad,final,note,original.Parents,treatment));
         }
         if(seen.Count!=data.Items.Length)throw new InvalidDataException("Rows deleted from review workbook");
@@ -220,11 +230,22 @@ public static class ReviewWorkbooks
         VerifySources(data);if(Hash(review)!=reviewHash||Hash(manifest)!=sourceHash)throw new InvalidDataException("Review/source changed during validation");
         result.Status=result.Errors.Count>0?"blocked":result.Accepted.Count>0?"ready":"nothing_to_export";return result;
     }
-    public static ValidationResult Export(string manifest,string review,string output,string reviewer,string? allowBlankForReview=null)
+    public static ValidationResult Export(string manifest,string review,string output,string reviewer,string? allowBlankForReview=null,
+        bool allowQuantityHandoff=false,string? allowBlankQuantityFor=null)
     {
         if(!Meaningful(reviewer))throw new InvalidDataException("Reviewer name is required");
         // Recompute at the write boundary; callers and cell colors cannot supply approval.
-        var fresh=Validate(manifest,review);
+        if(allowBlankQuantityFor!=null&&!allowQuantityHandoff)throw new ArgumentException("数量留空确认需要当前导出模式");
+        var fresh=Validate(manifest,review,allowQuantityHandoff);
+        if(fresh.Status=="ready"&&(fresh.QuantityHandoffs.Count!=0||allowBlankQuantityFor!=null)){
+            if(fresh.QuantityHandoffs.Count==0||
+                !string.Equals(allowBlankQuantityFor,fresh.ReviewSha256,StringComparison.OrdinalIgnoreCase)){
+                fresh.Status="blocked";
+                fresh.Errors.Add("数量或单位待补：须对当前复核版本确认留空后再导出。");
+                return fresh;
+            }
+            fresh.BlankQuantityApprovedReviewSha256=fresh.ReviewSha256;
+        }
         if(fresh.Status=="ready"&&(fresh.TreatmentExceptions.Count!=0||allowBlankForReview!=null)){
             // The exact validated bytes determine both eligibility and the affected row IDs.
             // There is no persistent global waiver or change to the row's disposition.
@@ -248,13 +269,15 @@ public static class ReviewWorkbooks
         for(int c=0;c<headers.Length;c++)ws.Cell(7,c+1).Value=headers[c];
         var data=JsonData.Read<ReviewDataset>(manifest);if(Hash(manifest)!=fresh.ManifestSha256||Hash(review)!=fresh.ReviewSha256)throw new InvalidDataException("Source/review changed after validation");int n=First;
         foreach(var r in fresh.Accepted){object?[] values=[r.FileId,r.Final.DrawingNumber,r.Final.Name,r.Final.Material,r.Final.Treatment,r.Final.Quantity,r.Final.Unit,null,null,r.Reason,data.Files.Single(f=>f.Id==r.FileId).Name,r.Id];for(int c=0;c<values.Length;c++)Put(ws.Cell(n,c+1),values[c]);ws.Cell(n,9).FormulaA1=$"IF(H{n}=\"\",\"\",F{n}*H{n})";n++;}
-        BaseStyle(ws,n-1,headers.Length,"人工复核后的确认明细","仅包含已确认且纳入的记录。单位分别保留，不合计跨单位数量。单价留空，金额公式保留。",[12,36,24,16,25,12,12,14,18,65,65,26]);
+        BaseStyle(ws,n-1,headers.Length,"人工复核后的确认明细",
+            fresh.QuantityHandoffs.Count==0?"仅包含已确认且纳入的记录。单位分别保留，单价留空，金额公式保留。":
+            $"含 {fresh.QuantityHandoffs.Count} 条数量或单位待补的明细。空白不是 0，请在 Excel 填完数量再用于报价。",[12,36,24,16,25,12,12,14,18,65,65,26]);
         ws.Range(First,8,n-1,8).Style.Fill.BackgroundColor=XLColor.FromHtml("#FFF6D9");ws.Range(First,8,n-1,9).Style.NumberFormat.Format="0.00";
         var temp=Path.Combine(folder,"确认明细.tmp.xlsx");var final=Path.Combine(folder,"确认明细.xlsx");book.SaveAs(temp,SaveOptions());
         using(var saved=new XLWorkbook(temp)){if(saved.Worksheet("确认明细").LastRowUsed()!.RowNumber()!=fresh.Accepted.Count+7)throw new InvalidDataException("Final row count changed");foreach(var cell in saved.Worksheet("确认明细").Range(First,8,n-1,8).Cells())if(!cell.IsEmpty())throw new InvalidDataException("Unit price must remain empty");}
         VerifySources(data);if(Hash(manifest)!=fresh.ManifestSha256||Hash(review)!=fresh.ReviewSha256)throw new InvalidDataException("Source/review changed before publishing");
         // Publish the audit record before the final workbook name becomes visible.
-        File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261125.1",taskId=data.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,outputSha256=Hash(temp),fresh.TreatmentExceptions,fresh.BlankTreatmentApprovedReviewSha256,accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
+        File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261125.1",taskId=data.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,outputSha256=Hash(temp),fresh.TreatmentExceptions,fresh.BlankTreatmentApprovedReviewSha256,fresh.QuantityHandoffs,fresh.BlankQuantityApprovedReviewSha256,accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
         File.Move(temp,final);
         return fresh;
     }

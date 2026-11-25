@@ -24,6 +24,8 @@ python -B packaging/Test-Package.py path-to-build/build-result.json path-to-new-
 
 检查包含无 PowerShell 环境的正常首页导入按钮、包内运行时、冻结 Python helper 的实际加载路径、界面提交/取消、栏宽和工具栏、勾选批量导出、同名文件、取消不出表、最终 XLSX 独立 XML 重开，以及初始包文件在测试后未被修改。验收报告和所有失败记录都留在测试目录，不自动清理。
 
+数量留空回归（需开发机 Python 的 openpyxl）：先构建测试工具，再运行 `python -B tests/test_quantity_handoff.py outputs/quantity-test`。验证真实桌面确认、旧数量 0 和留空的区别、两种 Excel 独立重开，以及在 Excel 中补填后金额公式计算。
+
 ## r13 修复版
 
 2026-11-11 的 r13-01 从提交 dbe40494e745bc5e678737aafb48f057897fa716 构建，包含编辑取消、栏宽恢复/保存、窄窗口操作区和模板元数据修复。新包不再通过字符串替换旧源码来组装。

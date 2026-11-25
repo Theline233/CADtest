@@ -12,6 +12,7 @@
   <ItemGroup>
     <Using Include="System.IO" />
     <Compile Include="..\work\segmented-20261109\review-source\TreatmentPolicy.cs" Link="TreatmentPolicy.cs" />
+    <Compile Include="..\work\segmented-20261109\review-source\QuantityHandoff.cs" Link="QuantityHandoff.cs" />
     <PackageReference Include="ClosedXML" Version="[0.105.1]" />
     <Content Include="templates\ExactQuotationTemplate-native-korean-header.xlsx" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>

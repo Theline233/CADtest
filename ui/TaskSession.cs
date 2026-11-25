@@ -299,11 +299,11 @@ public sealed partial class TaskSession
 
     /// <summary>在同一把锁内生成受守护程序校验的确认记录和客户样式文件。</summary>
     public Task<ValidationDto> ExportQuotationWithArchiveLockAsync(string output, string reviewer, string? expectedReviewSha256, CancellationToken ct = default,
-        string? allowBlankTreatmentFor = null)
+        string? allowBlankTreatmentFor = null, string? allowBlankQuantityFor = null)
     {
         if (!ValidReviewHash(expectedReviewSha256))
             throw new ArgumentException("必须提供有效的复核表 SHA-256，请重新校验后再导出。", nameof(expectedReviewSha256));
-        return ExportWithArchiveLockCoreAsync(output, reviewer, expectedReviewSha256, ct, true, allowBlankTreatmentFor);
+        return ExportWithArchiveLockCoreAsync(output, reviewer, expectedReviewSha256, ct, true, allowBlankTreatmentFor, allowBlankQuantityFor);
     }
 
     /// <summary>锁定刚写入的复核表并校验其哈希，直到校验引擎结束。</summary>
@@ -327,7 +327,7 @@ public sealed partial class TaskSession
         using (held.ReviewedFile)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await Engine.ValidateAsync(Kind, Manifest, reviewPath, ct, compatibleTreatmentPolicy: true).ConfigureAwait(false);
+            var result = await Engine.ValidateAsync(Kind, Manifest, reviewPath, ct, compatibleTreatmentPolicy: true, quantityHandoff: Kind == EngineKind.Segmented).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             if (result == null || !string.Equals(result.ReviewSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -342,7 +342,7 @@ public sealed partial class TaskSession
     static bool ValidReviewHash(string? hash) => hash != null && hash.Length == 64 && hash.All(Uri.IsHexDigit);
 
     async Task<ValidationDto> ExportWithArchiveLockCoreAsync(string output, string reviewer, string? expectedReviewSha256, CancellationToken ct,
-        bool quotationStyle = false, string? allowBlankTreatmentFor = null)
+        bool quotationStyle = false, string? allowBlankTreatmentFor = null, string? allowBlankQuantityFor = null)
     {
         var held = await AcquireReviewLocksAsync(expectedReviewSha256, ct, ReviewedPath).ConfigureAwait(false);
         using (held.Manifest)
@@ -359,7 +359,8 @@ public sealed partial class TaskSession
                 Directory.CreateDirectory(output);
                 engineFolder = Path.Combine(output, "复核记录");
             }
-            var result = await Engine.ExportAsync(Kind, Manifest, ReviewedPath, engineFolder, reviewer, ct, compatibleTreatmentPolicy: true, allowBlankTreatmentFor: allowBlankTreatmentFor).ConfigureAwait(false);
+            var result = await Engine.ExportAsync(Kind, Manifest, ReviewedPath, engineFolder, reviewer, ct, compatibleTreatmentPolicy: true, allowBlankTreatmentFor: allowBlankTreatmentFor,
+                allowBlankQuantityFor: allowBlankQuantityFor).ConfigureAwait(false);
             result.VerifiedFormattedSha256 = null;
             result.VerifiedAssociationSha256 = null;
             if (quotationStyle && result.Status == "ready")
@@ -502,13 +503,16 @@ public sealed partial class TaskSession
                 foreach (string id in proposedIds)
                 {
                     if (!rows.TryGetValue(id, out var row) || !items.TryGetValue(id, out var decision) ||
-                        decision.Mode != Rules.Pending || row.IsCrossedOut || row.HasOverride || !row.IsCompleteOriginal ||
+                        decision.Mode != Rules.Pending || row.IsCrossedOut || row.HasOverride ||
                         !row.Src.RequiresReviewSpecified || !row.Src.WarningsSpecified || !string.IsNullOrWhiteSpace(row.Note) ||
-                        ((row.Src.RequiresReview || !string.IsNullOrWhiteSpace(row.Warnings)) && !DuplicateQuantity.CanProposeDefault(row)) ||
+                        (!(Kind == EngineKind.Segmented && Rules.CanPreviewQuantityHandoff(row)) &&
+                            (!row.IsCompleteOriginal || ((row.Src.RequiresReview || !string.IsNullOrWhiteSpace(row.Warnings)) &&
+                                !DuplicateQuantity.CanProposeDefault(row)))) ||
                         !files.TryGetValue(row.FileId, out var file) || file.State == "不纳入本次")
                         throw new InvalidOperationException("有明细不适合直接确认，请重新核对。");
                     decision.Mode = Rules.Adopt;
                     if (DuplicateQuantity.CanProposeDefault(row)) decision.Note = DuplicateQuantity.DefaultNote(row);
+                    else if (row.Src.RequiresReview) decision.Note = ItemRow.AutoAdoptNote;
                 }
             }
             var dir = Path.GetDirectoryName(ReviewedPath)!;

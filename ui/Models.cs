@@ -173,6 +173,8 @@ public sealed class ValidationDto
     [JsonPropertyName("accepted")] public List<JsonElement> Accepted { get; set; } = [];
     [JsonPropertyName("excluded")] public List<JsonElement> Excluded { get; set; } = [];
     [JsonPropertyName("treatment_exceptions")] public List<TreatmentExportException> TreatmentExceptions { get; set; } = [];
+    [JsonPropertyName("quantity_handoffs")] public List<QuantityHandoff> QuantityHandoffs { get; set; } = [];
+    [JsonPropertyName("blank_quantity_approved_review_sha256")] public string? BlankQuantityApprovedReviewSha256 { get; set; }
     [JsonPropertyName("blank_treatment_approved_review_sha256")] public string? BlankTreatmentApprovedReviewSha256 { get; set; }
     // 引擎出错时输出 {"status":"failed","error":"..."}
     [JsonPropertyName("error")] public string? Error { get; set; }
@@ -200,6 +202,19 @@ public static class Rules
         return new[] { "待核", "未核", "待确认", "需确认", "需要确认", "未确认", "未解决", "不确定", "未确定", "未知", "无法判断", "无法确定", "需核查", "需要核查", "冲突", "尚未", "暂未", "待定", "存疑", "仍需", "尚需", "待处理", "未完成", "待答复", "需客户", "等待" }
             .Any(word => note.Contains(word, StringComparison.Ordinal));
     }
+
+    internal static bool CanDeferQuantity(CadVals c) =>
+        Meaningful(c.DrawingNumber) && Meaningful(c.Material) && !(c.Quantity < 0) &&
+        (c.Quantity == null || !Meaningful(c.Unit));
+
+    // Only simple missing-field warnings may be covered by the export confirmation.
+    // Discrepancies, duplicate frames and other recognition warnings keep their review rules.
+    internal static bool CanPreviewQuantityHandoff(ItemRow row) =>
+        !row.IsCrossedOut && !row.HasDuplicate && !row.HasOverride && row.Mode == Pending &&
+        row.Src.RequiresReviewSpecified && row.Src.WarningsSpecified && row.Note.Trim().Length == 0 &&
+        CanDeferQuantity(row.Src.Cad) && TreatmentPolicy.HasConfirmedValue(row.OrigTreatment) &&
+        row.Warnings.Split('；', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+            .All(w => w is "数量尚未确定" or "单位缺失或冲突");
 
     public static bool HardFieldsComplete(CadVals c) =>
         Meaningful(c.DrawingNumber) && c.Quantity.HasValue && c.Quantity >= 0 &&

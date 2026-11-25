@@ -54,6 +54,16 @@ public partial class App : Application
             return;
         }
 
+        if (args.Length == 3 && args[0] == "--quantity-handoff-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            int code;
+            try { code = await QuantityHandoffSelfTest.RunAsync(args[1], args[2]); }
+            catch { code = 2; }
+            Shutdown(code);
+            return;
+        }
+
         if (args.Length == 4 && args[0] == "--bulk-treatment-test")
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;
