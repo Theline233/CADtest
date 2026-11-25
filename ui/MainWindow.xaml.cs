@@ -930,6 +930,7 @@ public partial class MainWindow : Window
         TitleText.Text = (_isDemo ? "演示 · " : "") + Path.GetFileNameWithoutExtension(task.Files[0].Name) +
             (task.Files.Count == 1 ? "" : $" 等 {task.Files.Count} 份");
         TitleText.ToolTip = $"{task.Data.Title} · {task.Data.Files.Count} 份图纸 · {task.Data.Items.Count} 条候选\n{task.Folder}";
+        MarkTreatmentNotRequiredButton.Visibility = task.Kind == EngineKind.Segmented ? Visibility.Visible : Visibility.Collapsed;
         ErrorList.ItemsSource = null;
         IssueCountRun.Text = "";
         ErrorTab.Header = "待处理问题";
@@ -1286,7 +1287,7 @@ public partial class MainWindow : Window
         WorkflowHint.Text = pending > 0 && simplePending == pending
             ? $"请对照原图核对 {pending} 条明细，核对后点击右上角“确认并导出 Excel”。"
             : pending > 0
-            ? $"还有 {pending - simplePending} 条明细需要单独处理；有缺项请直接在表格中补全。"
+            ? $"还有 {pending - simplePending} 条明细需要单独处理。请核对原图，再选择采用、修订或不纳入。"
             : needDetails > 0
                 ? $"还有 {needDetails} 张图纸需要处理具体事项，请点击导出后按提示查看。"
             : filesToCheck.Count > 0
@@ -1482,14 +1483,17 @@ public partial class MainWindow : Window
         // 打X默认排除（用户未另行选择）的行视为可直接采用；用户自己设为不纳入的行不动。
         static bool DefaultCrossedExclusion(ItemRow r) => r.IsCrossedOut && r.Mode == Rules.Exclude &&
             string.Equals(r.Note.Trim(), r.Src.DefaultDecision?.Note?.Trim(), StringComparison.Ordinal);
-        var ok = rows.Where(r => r.IsCompleteOriginal && r.Mode != Rules.Revise &&
+        bool CanAdopt(ItemRow r) => r.IsCompleteOriginal ||
+            (_task?.Kind == EngineKind.Segmented && !r.IsCrossedOut && Rules.HardFieldsComplete(r.Src.Cad) &&
+             TreatmentPolicy.NeedsBlankApproval(TreatmentPolicy.Classify(r.OrigTreatment, null, r.Warnings, r.TreatmentEvidence)));
+        var ok = rows.Where(r => CanAdopt(r) && r.Mode != Rules.Revise &&
             (r.Mode != Rules.Exclude || DefaultCrossedExclusion(r))).ToList();
         int revised = rows.Count(r => r.Mode == Rules.Revise);
         int excluded = rows.Count(r => r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r));
-        int missing = rows.Count(r => r.Mode != Rules.Revise && !(r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r)) && !r.IsCompleteOriginal);
+        int missing = rows.Count(r => r.Mode != Rules.Revise && !(r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r)) && !CanAdopt(r));
         if (ok.Count == 0)
         {
-            _showDialog("选中的行里没有可以直接采用的：\n" + (missing > 0 ? $"· {missing} 行原值有缺项（图号/数量/单位/材质/工艺），请在表格中补全或设为不纳入。\n" : "") +
+            _showDialog("选中的行里没有可以直接采用的：\n" + (missing > 0 ? $"· {missing} 行原值有缺项或冲突，请在表格中核对补全或设为不纳入。\n" : "") +
                 (revised > 0 ? $"· {revised} 行已是人工修订，未改动。\n" : "") +
                 (excluded > 0 ? $"· {excluded} 行已设为不纳入，未改动。" : ""), "采用图纸", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
@@ -1694,7 +1698,8 @@ public partial class MainWindow : Window
         if (entry.ItemId != null && text.Contains("尚未复核"))
             return "这条明细还未核对：请核对原图，并选择采用图纸、人工修订或不纳入。";
         if (entry.ItemId != null && text.Contains("仍有缺值"))
-            return "这条明细仍有缺项：请对照原图，直接在表格中补充图号、数量、单位、材质或工艺。";
+            return "这条明细仍有缺项：请对照原图，直接在表格中补充图号、数量、单位、材质" +
+                (_task?.Kind == EngineKind.Accuracy ? "或工艺。" : "。");
         if (entry.ItemId != null && text.Contains("必须填写复核说明"))
             return "这条明细仍需处理，请对照原图检查并在表格中修改，或选择处理方式。";
         if (entry.ItemId != null && text.Contains("不纳入须说明原因"))
@@ -1711,8 +1716,10 @@ public partial class MainWindow : Window
         switch (dto.Status)
         {
             case "ready":
+                string treatment = dto.TreatmentExceptions.Count == 0 ? "" :
+                    $"\n其中 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认，导出时须另行确认。";
                 Status($"校验通过：可导出 {dto.Accepted.Count} 条，排除 {dto.Excluded.Count} 条");
-                MessageBox.Show(this, $"校验通过。\n将导出 {dto.Accepted.Count} 条确认明细，另有 {dto.Excluded.Count} 条被排除。", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, $"校验通过。\n将纳入 {dto.Accepted.Count} 条明细，另有 {dto.Excluded.Count} 条被排除。{treatment}", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
                 break;
             case "nothing_to_export":
                 Status("校验通过，但所有明细都被排除，没有可导出的内容");
@@ -2062,7 +2069,7 @@ public partial class MainWindow : Window
     }
 
     static string DecisionSignature(ValidationDto dto) =>
-        string.Join("\n", dto.Accepted.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal)) + "\n--EXCLUDED--\n" +
+        string.Join("\n", dto.Accepted.Select(item => item.GetRawText())) + "\n--EXCLUDED--\n" +
         string.Join("\n", dto.Excluded.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal));
 
     static bool HasCompleteDecisionCoverage(TaskSession task, ValidationDto dto)
@@ -2199,6 +2206,9 @@ public partial class MainWindow : Window
             if (proposed.Count > 0)
                 scope = $"本次包含所有图纸，不限于当前显示的明细。确认后，{proposed.Count} 条待复核明细将按图纸识别值采用。" +
                     Environment.NewLine + Environment.NewLine + scope;
+            if (dto.TreatmentExceptions.Count > 0)
+                scope = $"有 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认；本次还会单独询问是否留空导出。" +
+                    Environment.NewLine + Environment.NewLine + scope;
             int duplicateSums = task.Items.Count(i => proposed.Contains(i.Id) && DuplicateQuantity.CanProposeSum(i));
             if (duplicateSums > 0)
                 scope = $"确认后将批量采用 {duplicateSums} 条重复图号的默认累加数量；请逐条核对以下各处图框及计入范围。" +
@@ -2298,6 +2308,28 @@ public partial class MainWindow : Window
                 return false;
             }
         }
+        string? allowBlankTreatmentFor = null;
+        if (dto.TreatmentExceptions.Count != 0)
+        {
+            long finalVersion = _editVersion;
+            try
+            {
+                if (!ConfirmTreatmentExceptions(task, dto))
+                { Status("已返回核对，没有导出。"); return false; }
+            }
+            catch (Exception ex)
+            {
+                _showDialog(ex.Message, "无法确认表面处理", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            if (!ReferenceEquals(_task, task) || _editVersion != finalVersion)
+            {
+                _showDialog("明细在确认期间发生变化，请重新核对后再导出。",
+                    "请重新确认", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            allowBlankTreatmentFor = dto.ReviewSha256;
+        }
         SetBusy(true);
         Status("正在导出…");
         ValidationDto exported;
@@ -2305,7 +2337,7 @@ public partial class MainWindow : Window
         try
         {
             folder = ExportFolderFactory();
-            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!);
+            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!, allowBlankTreatmentFor: allowBlankTreatmentFor);
             if (exported.Status != "ready" || !File.Exists(Path.Combine(folder, "确认明细.xlsx")))
                 throw new IOException("引擎没有完成导出：" + (exported.Error ?? string.Join("\n", exported.Errors.Take(5))));
             if (!string.Equals(exported.ReviewSha256, dto.ReviewSha256, StringComparison.OrdinalIgnoreCase))

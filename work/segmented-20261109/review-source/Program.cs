@@ -23,10 +23,10 @@ try
     {
         ReviewWorkbooks.Prepare(Need("input"),Need("output"));
     }
-    else if(args[0] is "validate" or "export")
+    else if(args[0] is "validate" or "export" or "validate-v1" or "export-v1")
     {
-        var result=args[0]=="export"
-            ?ReviewWorkbooks.Export(Need("manifest"),Need("review"),Need("output"),Need("reviewer"))
+        var result=args[0] is "export" or "export-v1"
+            ?ReviewWorkbooks.Export(Need("manifest"),Need("review"),Need("output"),Need("reviewer"),parameters.GetValueOrDefault("allow-blank-treatment-for"))
             :ReviewWorkbooks.Validate(Need("manifest"),Need("review"));
         Console.WriteLine(JsonData.Text(result));
         Environment.ExitCode=result.Status is "ready" or "nothing_to_export"?0:2;

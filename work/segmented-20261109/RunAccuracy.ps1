@@ -6,6 +6,8 @@ param(
     [string]$Manifest,
     [string]$Review,
     [string]$Reviewer,
+    [switch]$UseCurrentTreatmentPolicy,
+    [string]$AllowBlankTreatmentFor,
     [double]$MemoryMiB=3072,
     [double]$TimeoutSeconds=300,
     [double]$CpuPercent=25,
@@ -36,6 +38,7 @@ try {
     $env:PYTHONUTF8 = '1'
     $culture=[Globalization.CultureInfo]::InvariantCulture
     $limits=@('--memory-mib',$MemoryMiB.ToString($culture),'--timeout',$TimeoutSeconds.ToString($culture),'--cpu-percent',$CpuPercent.ToString($culture))
+    if($AllowBlankTreatmentFor -and $Mode -ne 'Export'){throw '-AllowBlankTreatmentFor is only for Export.'}
     if($Mode -eq 'Recognize'){
         if(-not $Drawing -or -not $Output){throw 'Recognize requires -Drawing and a new -Output directory.'}
         # Validate the task parent as well as recognition/, without creating it.
@@ -51,6 +54,8 @@ try {
     } else {
         if(-not $Manifest -or -not $Review){throw 'Validate/Export require -Manifest and -Review.'}
         $arguments=@('-B','-X','utf8',(Join-Path $PSScriptRoot 'review_guard.py'),$Mode.ToLowerInvariant(),'--manifest',$Manifest,'--review',$Review)+$limits
+        if($UseCurrentTreatmentPolicy){$arguments+='--compatible-treatment-policy'}
+        if($AllowBlankTreatmentFor){$arguments+=@('--allow-blank-treatment-for',$AllowBlankTreatmentFor)}
         if($Mode -eq 'Export'){
             if(-not $Output -or -not $Reviewer){throw 'Export requires -Output and -Reviewer.'}
             $arguments+=@('--output',$Output,'--reviewer',$Reviewer)

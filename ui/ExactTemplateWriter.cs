@@ -15,7 +15,7 @@ namespace CadReviewUI;
 // the reference quotation displays only the numeric quantity.
 internal sealed record ExactQuotationRow(
     string Id, string FileId, string DrawingNumber, string? Name, string Material,
-    string Treatment, decimal Quantity, string Unit, string FileName);
+    string? Treatment, decimal Quantity, string Unit, string FileName);
 
 internal static class ExactTemplateWriter
 {
@@ -112,7 +112,7 @@ internal static class ExactTemplateWriter
         {
             if (row == null || string.IsNullOrWhiteSpace(row.Id) || !ids.Add(row.Id) ||
                 string.IsNullOrWhiteSpace(row.FileId) || string.IsNullOrWhiteSpace(row.DrawingNumber) ||
-                string.IsNullOrWhiteSpace(row.Material) || string.IsNullOrWhiteSpace(row.Treatment) ||
+                string.IsNullOrWhiteSpace(row.Material) ||
                 string.IsNullOrWhiteSpace(row.Unit) || string.IsNullOrWhiteSpace(row.FileName) || row.Quantity < 0)
                 throw new InvalidDataException("确认明细缺少必要字段、标识重复或数量无效。");
             CheckText(row.DrawingNumber);
@@ -223,7 +223,7 @@ internal static class ExactTemplateWriter
             SetText(Cell(detail, "C", r), value.DrawingNumber);
             if (!string.IsNullOrEmpty(value.Name)) SetText(Cell(detail, "D", r), value.Name);
             SetText(Cell(detail, "E", r), value.Material);
-            SetText(Cell(detail, "F", r), value.Treatment);
+            if (!string.IsNullOrEmpty(value.Treatment)) SetText(Cell(detail, "F", r), value.Treatment);
             SetNumber(Cell(detail, "G", r), value.Quantity.ToString(Invariant));
         }
     }

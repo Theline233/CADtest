@@ -1,6 +1,6 @@
 using ClosedXML.Excel;
 
-if(args.Length < 2) throw new ArgumentException("fixture INPUT OUTPUT | recalc OUTPUT | treatment-dwg OUTPUT NOTES");
+if(args.Length < 2) throw new ArgumentException("fixture INPUT OUTPUT | recalc OUTPUT | review-order-dwg OUTPUT | treatment-dwg OUTPUT NOTES");
 if(args[0]=="fixture")
 {
     if(args.Length!=3 || File.Exists(args[2])) throw new ArgumentException("Use a new fixture path");
@@ -26,6 +26,8 @@ if(args[0]=="fixture")
     book.SaveAs(args[2]);
     Console.WriteLine("synthetic_fixture_created");
 }
+else if(args[0]=="review-order-dwg")
+    ReviewOrderFixture.WriteDwg(args[1]);
 else if(args[0]=="recalc")
 {
     var path=args[1];

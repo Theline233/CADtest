@@ -42,6 +42,7 @@ public sealed class DsItem
     [JsonPropertyName("treatment_evidence")] public string TreatmentEvidence { get; set; } = "";
     [JsonPropertyName("reference_info")] public string ReferenceInfo { get; set; } = "";
     // Optional in schema 1: old, frozen tasks have no duplicate metadata.
+    [JsonPropertyName("frame_location")] public FrameLocation? FrameLocation { get; set; }
     [JsonPropertyName("duplicate")] public DsDuplicate? Duplicate { get; set; }
     // 识别引擎给出的初始处理方式（目前只有“图面整框打X → 不纳入”）。旧任务没有此字段。
     [JsonPropertyName("default_decision")] public DsDefaultDecision? DefaultDecision { get; set; }
@@ -146,9 +147,18 @@ public sealed class DecisionSet
     public DateTime SavedUtc { get; set; }
     public Dictionary<string, ItemDecision> Items { get; set; } = [];
     public Dictionary<string, FileDecision> Files { get; set; } = [];
+    // Omitting this field leaves old schema-2 archive checksums unchanged.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, ReviewOrder>? Orders { get; set; }
 }
 
 // ---- 校验/导出引擎的输出 ----
+public sealed record TreatmentExportException(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("file_id")] string FileId,
+    [property: JsonPropertyName("drawing_number")] string DrawingNumber,
+    [property: JsonPropertyName("disposition")] string Disposition);
+
 public sealed class ValidationDto
 {
     [JsonPropertyName("status")] public string Status { get; set; } = "";
@@ -162,6 +172,8 @@ public sealed class ValidationDto
     [JsonPropertyName("errors")] public List<string> Errors { get; set; } = [];
     [JsonPropertyName("accepted")] public List<JsonElement> Accepted { get; set; } = [];
     [JsonPropertyName("excluded")] public List<JsonElement> Excluded { get; set; } = [];
+    [JsonPropertyName("treatment_exceptions")] public List<TreatmentExportException> TreatmentExceptions { get; set; } = [];
+    [JsonPropertyName("blank_treatment_approved_review_sha256")] public string? BlankTreatmentApprovedReviewSha256 { get; set; }
     // 引擎出错时输出 {"status":"failed","error":"..."}
     [JsonPropertyName("error")] public string? Error { get; set; }
 }
@@ -189,9 +201,12 @@ public static class Rules
             .Any(word => note.Contains(word, StringComparison.Ordinal));
     }
 
-    public static bool Complete(CadVals c) =>
+    public static bool HardFieldsComplete(CadVals c) =>
         Meaningful(c.DrawingNumber) && c.Quantity.HasValue && c.Quantity >= 0 &&
-        Meaningful(c.Unit) && Meaningful(c.Material) && Meaningful(c.Treatment);
+        Meaningful(c.Unit) && Meaningful(c.Material);
+
+    // The preview path never auto-adopts a row whose treatment is unresolved.
+    public static bool Complete(CadVals c) => HardFieldsComplete(c) && TreatmentPolicy.HasConfirmedValue(c.Treatment);
 
     public static List<string> MissingFields(CadVals c)
     {

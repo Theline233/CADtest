@@ -108,7 +108,7 @@ public static class ReviewWorkbooks
             if(row.RequiresReview){ws.Cell(n,8).Style.Fill.BackgroundColor=XLColor.FromHtml("#FDE9E7");ws.Cell(n,8).Style.Font.FontColor=XLColor.DarkRed;}
             n++;
         }
-        BaseStyle(ws,n-1,23,data.Title,"只填写黄色确认区。采用图纸无需重复抄写已有值；缺值/冲突须人工修订。正式导出由程序重新校验。",[10,36,24,16,22,12,12,55,16,36,24,18,24,12,12,44,20,36,65,65,65,26,70]);
+        BaseStyle(ws,n-1,23,data.Title,"只填写黄色确认区。采用图纸无需重复抄写已有值；工艺无需处理时可人工修订确认工艺为“无需表面处理”。其他缺值及冲突仍须核对。",[10,36,24,16,22,12,12,55,16,36,24,18,24,12,12,44,20,36,65,65,65,26,70]);
         ws.Range(5,1,5,8).Merge();ws.Cell(5,1).Value=$"共 {data.Files.Length} 份图纸、{data.Items.Length} 条候选明细。先核对文件范围，再填写逐项确认。";
         if(n>First){ws.Range(First,9,n-1,9).CreateDataValidation().List("\"待复核,采用图纸,人工修订,不纳入\"",true);
             ws.Range(First,6,n-1,6).Style.NumberFormat.Format="General";ws.Range(First,14,n-1,14).Style.NumberFormat.Format="General";}
@@ -148,7 +148,7 @@ public static class ReviewWorkbooks
         else if(Text(cell)!=(Convert.ToString(value,CultureInfo.InvariantCulture)??"").Trim())throw new InvalidDataException("Source value changed at "+cell.Address);
     }
     static bool Meaningful(string? s)=>!string.IsNullOrWhiteSpace(s)&&!Unknown.Contains(s.Trim(),StringComparer.OrdinalIgnoreCase);
-    static bool Complete(CadValues c)=>Meaningful(c.DrawingNumber)&&c.Quantity.HasValue&&c.Quantity>=0&&Meaningful(c.Unit)&&Meaningful(c.Material)&&Meaningful(c.Treatment);
+    static bool Complete(CadValues c)=>Meaningful(c.DrawingNumber)&&c.Quantity.HasValue&&c.Quantity>=0&&Meaningful(c.Unit)&&Meaningful(c.Material);
     public static ValidationResult Validate(string manifest,string review)
     {
         manifest=SafePath(manifest);review=SafePath(review);CheckArchive(review);
@@ -191,11 +191,16 @@ public static class ReviewWorkbooks
             if(mode=="采用图纸"&&hasOverride){result.Errors.Add(id+": 采用图纸时不可混入修订值，请选择人工修订");continue;}
             string? Override(string value,string? sourceValue)=>value==""?sourceValue:value;
             var final=mode=="采用图纸"?original.Cad:new CadValues(Override(fields[0],original.Cad.DrawingNumber)!,Override(fields[1],original.Cad.Name),Override(fields[2],original.Cad.Material),Override(fields[3],original.Cad.Treatment),quantity??original.Cad.Quantity,Override(fields[5],original.Cad.Unit));
-            if(!Complete(final)){result.Errors.Add(id+": 图号/数量/单位/材质/工艺仍有缺值或未确定内容");continue;}
+            if(!Complete(final)){result.Errors.Add(id+": 图号/数量/单位/材质仍有缺值或未确定内容");continue;}
+            var treatment=TreatmentPolicy.Classify(original.Cad.Treatment,mode=="人工修订"?fields[3]:null,original.Warnings,original.TreatmentEvidence);
+            if(treatment==TreatmentPolicy.Conflict){result.Errors.Add(id+": 表面处理冲突或适用范围未核对，请明确工艺后再导出");continue;}
             if((original.RequiresReview||mode=="人工修订")&&!Meaningful(note)){result.Errors.Add(id+": 异议或修订必须填写复核说明");continue;}
             if(original.DefaultDecision is not null&&note==original.DefaultDecision.Note.Trim()){result.Errors.Add(id+": 图面打X的明细改为纳入时，须改写复核说明，写明纳入原因");continue;}
             if(mode=="人工修订"&&!hasOverride){result.Errors.Add(id+": 人工修订未填写修订值");continue;}
-            result.Accepted.Add(new(id,original.FileId,mode,original.Cad,final,note,original.Parents));
+            if(TreatmentPolicy.NeedsBlankApproval(treatment))
+                result.TreatmentExceptions.Add(new(id,original.FileId,final.DrawingNumber,treatment));
+            if(treatment!=TreatmentPolicy.Confirmed)final=final with {Treatment=null};
+            result.Accepted.Add(new(id,original.FileId,mode,original.Cad,final,note,original.Parents,treatment));
         }
         if(seen.Count!=data.Items.Length)throw new InvalidDataException("Rows deleted from review workbook");
         foreach(var f in data.Files)
@@ -215,14 +220,26 @@ public static class ReviewWorkbooks
         VerifySources(data);if(Hash(review)!=reviewHash||Hash(manifest)!=sourceHash)throw new InvalidDataException("Review/source changed during validation");
         result.Status=result.Errors.Count>0?"blocked":result.Accepted.Count>0?"ready":"nothing_to_export";return result;
     }
-    public static ValidationResult Export(string manifest,string review,string output,string reviewer)
+    public static ValidationResult Export(string manifest,string review,string output,string reviewer,string? allowBlankForReview=null)
     {
         if(!Meaningful(reviewer))throw new InvalidDataException("Reviewer name is required");
         // Recompute at the write boundary; callers and cell colors cannot supply approval.
-        var fresh=Validate(manifest,review);var folder=NewOutput(output);
+        var fresh=Validate(manifest,review);
+        if(fresh.Status=="ready"&&(fresh.TreatmentExceptions.Count!=0||allowBlankForReview!=null)){
+            // The exact validated bytes determine both eligibility and the affected row IDs.
+            // There is no persistent global waiver or change to the row's disposition.
+            if(fresh.TreatmentExceptions.Count==0||
+                !string.Equals(allowBlankForReview,fresh.ReviewSha256,StringComparison.OrdinalIgnoreCase)){
+                fresh.Status="blocked";
+                fresh.Errors.Add("表面处理缺失或待确认：须对当前复核版本列出的明细确认留空导出。");
+                return fresh;
+            }
+            fresh.BlankTreatmentApprovedReviewSha256=fresh.ReviewSha256;
+        }
+        var folder=NewOutput(output);
         File.WriteAllText(Path.Combine(folder,"validation.json"),JsonData.Text(fresh));
         if(fresh.Status=="nothing_to_export"){
-            File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261106.1",status="nothing_to_export",taskId=fresh.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
+            File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261125.1",status="nothing_to_export",taskId=fresh.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
             return fresh;
         }
         if(fresh.Status!="ready")return fresh;
@@ -237,7 +254,7 @@ public static class ReviewWorkbooks
         using(var saved=new XLWorkbook(temp)){if(saved.Worksheet("确认明细").LastRowUsed()!.RowNumber()!=fresh.Accepted.Count+7)throw new InvalidDataException("Final row count changed");foreach(var cell in saved.Worksheet("确认明细").Range(First,8,n-1,8).Cells())if(!cell.IsEmpty())throw new InvalidDataException("Unit price must remain empty");}
         VerifySources(data);if(Hash(manifest)!=fresh.ManifestSha256||Hash(review)!=fresh.ReviewSha256)throw new InvalidDataException("Source/review changed before publishing");
         // Publish the audit record before the final workbook name becomes visible.
-        File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261106.1",taskId=data.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,outputSha256=Hash(temp),accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
+        File.WriteAllText(Path.Combine(folder,"确认结果.json"),JsonData.Text(new {schemaVersion=1,engineVersion="review-20261125.1",taskId=data.TaskId,reviewer,confirmedUtc=DateTimeOffset.UtcNow,sourceSha256=fresh.ManifestSha256,reviewSha256=fresh.ReviewSha256,outputSha256=Hash(temp),fresh.TreatmentExceptions,fresh.BlankTreatmentApprovedReviewSha256,accepted=fresh.Accepted,excluded=fresh.Excluded,files=fresh.Files}));
         File.Move(temp,final);
         return fresh;
     }

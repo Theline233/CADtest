@@ -34,6 +34,16 @@ public partial class App : Application
             return;
         }
 
+        if (args.Length == 4 && args[0] == "--review-export-order-test")
+        {
+            ShutdownMode = ShutdownMode.OnExplicitShutdown;
+            int code;
+            try { code = await ReviewExportOrderSelfTest.RunAsync(args[1], args[2], args[3]); }
+            catch { code = 2; }
+            Shutdown(code);
+            return;
+        }
+
         if (args.Length == 5 && args[0] == "--frontend-integration-test")
         {
             ShutdownMode = ShutdownMode.OnExplicitShutdown;

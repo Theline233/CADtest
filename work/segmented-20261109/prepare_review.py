@@ -7,6 +7,21 @@ ROOT=workspace_root()
 def sha(path):
     with Path(path).open('rb') as f:return hashlib.file_digest(f,'sha256').hexdigest().upper()
 
+def frame_locations(frames):
+    """Map each prediction occurrence to its physical frame, including subparts."""
+    locations={}
+    for frame in frames:
+        bounds=frame.get('bounds')
+        if (not isinstance(bounds,list) or len(bounds)!=4 or
+            not all(type(n) in (int,float) and math.isfinite(n) for n in bounds) or
+            bounds[0]>=bounds[2] or bounds[1]>=bounds[3]):
+            continue
+        location={'layout':str(frame.get('layout') or ''),'bounds':bounds}
+        for occurrence in [frame,*frame.get('subparts',[])]:
+            key=(occurrence.get('index'),occurrence.get('drawingNumber'))
+            if key[0] is not None and key[1]:locations.setdefault(key,location)
+    return locations
+
 def duplicate_from_record(row):
     """Copy optional predictor evidence without treating historical rows as new results."""
     raw=row.get('duplicate_occurrences')
@@ -132,6 +147,9 @@ def main():
                     if not artifact.is_relative_to(folder.resolve()) or not artifact.is_file() or sha(artifact)!=digest:
                         raise ValueError(f'{sid}: {stage} output changed')
                     sources[str(artifact)]=digest
+            # Keep only rectangles before loading the other potentially large reports.
+            fields_path=folder/'frame-field-candidates.json'
+            locations=frame_locations(read(fields_path)['frames'])
             p=read(folder/'predictions.json')
             raw=read(folder/'cad-read-projection.json')
             profile=read(folder/'profile.json')
@@ -214,11 +232,17 @@ def main():
                         if any(v=='mismatch' for v in c['fields'].values()):notes.append('与候选Excel有资料差异，不预判哪方错误')
                         if any(v in ('ambiguous_reference','reference_semantics_uncertain') for v in c['fields'].values()):notes.append('对照表列含义/重复行需确认，不反填CAD')
                 ev=row.get('evidence',{});key=sid+'|'+row['drawing_number'];identity=hashlib.sha256((sources[str(path)]+'|'+key).encode()).hexdigest()[:24]
+                # The predictor's active occurrences exclude cancelled copies when
+                # there is an active frame. Anchor the merged row to its first
+                # located occurrence; do not alter quantity or occurrence evidence.
+                location=next((locations[(i,row['drawing_number'])] for i in row.get('frame_indices',[])
+                    if (i,row['drawing_number']) in locations),None)
                 items.append({'id':identity,'file_id':sid,'cad':{'drawing_number':row['drawing_number'],**{f:row.get(f) for f in ('name','material','treatment','quantity','unit')}},
                     'warnings':'；'.join(notes),'requires_review':bool(notes),'kind':'；'.join(kinds),'parents':row.get('parent_drawing_numbers',[]),
                     'quantity_evidence':'；'.join(dict.fromkeys([x['text'] for k in ('quantity','quantity_context') for x in ev.get(k,[])]+
                         [v for a in association if a.get('field')=='quantity' for v in association_values(a)])),
                     'treatment_evidence':'；'.join(dict.fromkeys(x['text'] for x in ev.get('treatment',[]))), 'reference_info':reference_info,
+                    **({'frame_location':location} if location is not None else {}),
                     **({'duplicate':duplicate} if duplicate is not None else {}),
                     **({'default_decision':{'mode':'不纳入','note':crossed_note}} if row.get('crossed_out') is True else {})})
     source_list=[{'path':p,'sha256':h} for p,h in sorted(sources.items())]

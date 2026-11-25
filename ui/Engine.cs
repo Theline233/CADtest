@@ -296,18 +296,21 @@ public static class Engine
     }
 
     // ───────────── 校验 / 导出 ─────────────
-    static ProcessStartInfo ReviewCommand(EngineKind kind, string mode, string manifest, string review, string? output, string? reviewer)
+    static ProcessStartInfo ReviewCommand(EngineKind kind, string mode, string manifest, string review, string? output, string? reviewer, bool compatibleTreatmentPolicy, string? allowBlankTreatmentFor = null)
     {
         var extra = new List<string>();
         if (output != null) { extra.Add("--output"); extra.Add(output); extra.Add("--reviewer"); extra.Add(reviewer ?? ""); }
 
         if (kind == EngineKind.Accuracy)
         {
+            if (allowBlankTreatmentFor != null) throw new InvalidOperationException("旧识别引擎不支持留空确认。");
             var psi = new ProcessStartInfo(AccuracyReviewExe);
             foreach (var a in new[] { mode, "--manifest", manifest, "--review", review }.Concat(extra)) psi.ArgumentList.Add(a);
             return psi;
         }
 
+        if (compatibleTreatmentPolicy) extra.Add("--compatible-treatment-policy");
+        if (allowBlankTreatmentFor != null) { extra.Add("--allow-blank-treatment-for"); extra.Add(allowBlankTreatmentFor); }
         // 直接启动守护程序，避免 cmd 展开复核人或路径中的 %、&、引号等字符。
         // 分段版冻结的 .NET 程序明确设置 UTF-8；Python 也显式使用 UTF-8。
         if (!File.Exists(SegmentedGuard)) throw new FileNotFoundException("分段任务的复核守护程序缺失：" + SegmentedGuard);
@@ -326,15 +329,15 @@ public static class Engine
         if (KindFor(folder) != kind) throw new InvalidOperationException("任务的引擎类型已改变，请重新打开任务；本次未执行校验或导出。");
     }
 
-    public static async Task<ValidationDto> ValidateAsync(EngineKind kind, string manifest, string review, CancellationToken ct = default)
+    public static async Task<ValidationDto> ValidateAsync(EngineKind kind, string manifest, string review, CancellationToken ct = default, bool compatibleTreatmentPolicy = false)
     {
-        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "validate", manifest, review, null, null), ct)); }
+        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "validate", manifest, review, null, null, compatibleTreatmentPolicy), ct)); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { return new ValidationDto { Status = "failed", Error = ex.Message }; }
     }
 
-    public static async Task<ValidationDto> ExportAsync(EngineKind kind, string manifest, string review, string output, string reviewer, CancellationToken ct = default)
+    public static async Task<ValidationDto> ExportAsync(EngineKind kind, string manifest, string review, string output, string reviewer, CancellationToken ct = default, bool compatibleTreatmentPolicy = false, string? allowBlankTreatmentFor = null)
     {
-        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "export", manifest, review, output, reviewer), ct)); }
+        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "export", manifest, review, output, reviewer, compatibleTreatmentPolicy, allowBlankTreatmentFor), ct)); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { return new ValidationDto { Status = "failed", Error = ex.Message }; }
     }
 

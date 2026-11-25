@@ -694,6 +694,20 @@
                                             </Button.ContextMenu>
                                             更多
                                         </Button>
+                                        <Button x:Name="ReviewOrderButton" Style="{StaticResource Ghost}" Tag="&#xE8CB;" Click="DropDown_Click"
+                                                ToolTip="按图框排列，保存后用于两种 Excel；点列标题只临时排序">
+                                            <Button.ContextMenu>
+                                                <ContextMenu Style="{StaticResource MenuCard}" Opened="ReviewOrderMenu_Opened">
+                                                    <MenuItem Header="原顺序" Tag="original" Click="ReviewOrderMode_Click"/>
+                                                    <MenuItem Header="横向优先（先行）" Tag="horizontal" Click="ReviewOrderMode_Click"/>
+                                                    <MenuItem Header="纵向优先（先列）" Tag="vertical" Click="ReviewOrderMode_Click"/>
+                                                    <Separator/>
+                                                    <MenuItem Header="选中行上移" Tag="-1" Click="ReviewOrderMove_Click"/>
+                                                    <MenuItem Header="选中行下移" Tag="1" Click="ReviewOrderMove_Click"/>
+                                                </ContextMenu>
+                                            </Button.ContextMenu>
+                                            导出顺序
+                                        </Button>
                                     </WrapPanel>
                                 </Grid>
                             </Border>
@@ -939,6 +953,14 @@
                                         </TextBlock>
                                     </Grid>
                                 </Border>
+
+                                <DockPanel Margin="0,-12,0,14">
+                                    <Button x:Name="MarkTreatmentNotRequiredButton" DockPanel.Dock="Right" Style="{StaticResource Ghost}"
+                                            Click="MarkTreatmentNotRequired_Click"
+                                            ToolTip="对照原图后记录本行无需表面处理；保留识别原值，导出留空">标记无需处理</Button>
+                                    <TextBlock Text="{Binding TreatmentReviewLabel}" Foreground="{StaticResource Text2}"
+                                               VerticalAlignment="Center" TextWrapping="Wrap"/>
+                                </DockPanel>
 
                                 <!-- 识别依据：一个分组，空项自动隐藏 -->
                                 <TextBlock Text="识别依据" Style="{StaticResource SectionTitle}"/>

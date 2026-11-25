@@ -32,7 +32,9 @@ New-Item -ItemType Directory -Path .\inputs -Force
 .\Run.ps1 -Mode Export -Manifest outputs\first-run\review\source.json -Review outputs\first-run\review\reviewed.xlsx -Output outputs\confirmed-first-run -Reviewer '实际复核人'
 ~~~
 
-输出目录必须位于本工作区 outputs 下且尚不存在。来源文件、原值和冻结程序仍须匹配；缺项或未核查内容会阻止导出。不能直接搬动旧任务并声称来源仍有效，因为任务内部记录了识别时的绝对路径和哈希。
+输出目录必须位于本工作区 outputs 下且尚不存在。来源文件、原值和冻结程序仍须匹配；图号、数量、单位、材质缺项或计入范围等尚未核对时会阻止导出。
+
+人工确认无需表面处理，在黄色“确认工艺”列填 `无需表面处理` 并选择“人工修订”。若只是缺值或待确认，校验结果的 `treatment_exceptions` 会列出受影响的记录。校验状态为 `ready` 且复核人核对清单后，命令行导出加 `-AllowBlankTreatmentFor <校验返回的 review_sha256>`；复核文件发生改变后须重做校验和确认。两种情形在确认记录中分别保留，Excel 工艺列均留空。r13 等旧分段任务的命令行默认沿用冻结校验器；要启用留空规则，校验与导出都加 `-UseCurrentTreatmentPolicy`。这不会改写任务原有的冻结文件。不能直接搬动旧任务并声称来源仍有效，因为任务内部记录了识别时的绝对路径和哈希。
 
 ## 路径与依赖
 
@@ -77,6 +79,8 @@ python -B .\tests\test_portability.py
 
 工艺回归：运行 `node .\tests\treatment_rules.mjs` 验证规则；构建含测试工具后运行 `python -B .\tests\test_treatment.py`（需 openpyxl）可从合成 DWG 验证识别、复核与确认明细，产物留在新建的 `outputs/treatment-*` 下。
 
+Windows 上可运行 `.\tests\Test-ReviewExportOrder.ps1 -Output outputs/cfb-review-check`。脚本生成略错位的三列合成 DWG，检查桌面保存、重开和顺序，使用 openpyxl 独立重开两种最终 Excel；同时以指定的旧版 Git 提交重新构建一个旧引擎作兼容检查，不需要实际客户资料。
+
 历史脚本依赖开发机私有图纸及未上传结果，已从当前使用目录移出；原本地成果和早期 Git 历史保留。当前测试不能代替对不同客户图纸的准确性评估。
 
 ## 目录
@@ -90,7 +94,7 @@ python -B .\tests\test_portability.py
 | work/segmented-20261109/batch-fix-20261106 | 数量与预测规则 |
 | work/segmented-20261109/polish-20261106 | 工艺提取 |
 | work/segmented-20261109/review-source | 复核和通用 Excel 导出 |
-| tests | 不依赖客户图纸的迁移测试 |
+| tests | 不依赖客户图纸的迁移、复核与导出验证 |
 
 引擎目录名沿用当前结构。桌面与后端使用同一工作区和运行时配置；源码构建不等于已制作可分发安装程序。
 

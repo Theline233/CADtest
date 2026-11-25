@@ -29,6 +29,50 @@ public sealed partial class TaskSession
     public string SessionDir { get; }
     public List<ItemRow> Items { get; } = [];
     public List<FileRow> Files { get; } = [];
+    readonly Dictionary<string, ReviewOrder> _orders = new(StringComparer.Ordinal);
+    public string OrderMode(string fileId) => _orders.GetValueOrDefault(fileId)?.Mode ?? ReviewOrder.Original;
+
+    internal bool SetOrder(string fileId, string mode)
+    {
+        var original = Data.Items.Where(r => r.FileId == fileId).ToArray();
+        if (original.Length == 0) return false;
+        if (mode != ReviewOrder.Original && !original.Any(r => r.FrameLocation?.IsUsable == true)) return false;
+        var ids = mode switch
+        {
+            ReviewOrder.Original => original.Select(r => r.Id).ToArray(),
+            ReviewOrder.Horizontal => ReviewOrder.ByGeometry(original, false),
+            ReviewOrder.Vertical => ReviewOrder.ByGeometry(original, true),
+            _ => throw new ArgumentOutOfRangeException(nameof(mode)),
+        };
+        if (mode == ReviewOrder.Original) _orders.Remove(fileId);
+        else _orders[fileId] = new ReviewOrder(mode, ids);
+        ApplyOrder(fileId, ids);
+        Changed?.Invoke();
+        return true;
+    }
+
+    internal bool MoveItem(ItemRow row, int offset)
+    {
+        var ids = Items.Where(r => r.FileId == row.FileId).Select(r => r.Id).ToArray();
+        int from = Array.IndexOf(ids, row.Id), to = from + offset;
+        if (from < 0 || to < 0 || to >= ids.Length) return false;
+        (ids[from], ids[to]) = (ids[to], ids[from]);
+        _orders[row.FileId] = new ReviewOrder(ReviewOrder.Manual, ids);
+        ApplyOrder(row.FileId, ids);
+        Changed?.Invoke();
+        return true;
+    }
+
+    void ApplyOrder(string fileId, IReadOnlyList<string> ids)
+    {
+        var rows = Items.Where(r => r.FileId == fileId).ToDictionary(r => r.Id, StringComparer.Ordinal);
+        int index = 0;
+        for (int i = 0; i < Items.Count; i++)
+            if (Items[i].FileId == fileId) Items[i] = rows[ids[index++]];
+    }
+
+    Dictionary<string, ReviewOrder>? SnapshotOrders() =>
+        _orders.Count == 0 ? null : new Dictionary<string, ReviewOrder>(_orders, StringComparer.Ordinal);
     public string? LoadNote { get; private set; }
 
     public string DecisionsPath => Path.Combine(SessionDir, "ui-decisions.json");
@@ -138,6 +182,12 @@ public sealed partial class TaskSession
             row.Edited += _ => Changed?.Invoke();
             Items.Add(row);
         }
+        if (saved?.Orders != null)
+            foreach (var (fileId, order) in saved.Orders)
+            {
+                _orders.Add(fileId, order);
+                ApplyOrder(fileId, order.Ids);
+            }
         RefreshFileSummaries();
     }
 
@@ -173,7 +223,7 @@ public sealed partial class TaskSession
                     ManifestSha256 = ManifestSha256,
                     SavedUtc = DateTime.UtcNow,
                     Items = items.Where(kv => !kv.Value.IsBlank).ToDictionary(kv => kv.Key, kv => kv.Value),
-                    Files = files,
+                    Files = files, Orders = SnapshotOrders(),
                 };
                 using var source = LockCurrentManifest();
                 using var archiveLock = AcquireArchiveLock();
@@ -210,7 +260,7 @@ public sealed partial class TaskSession
             {
                 Schema = 2, TaskId = Data.TaskId, ManifestSha256 = ManifestSha256, SavedUtc = DateTime.UtcNow,
                 Items = items.Where(kv => !kv.Value.IsBlank).ToDictionary(kv => kv.Key, kv => kv.Value),
-                Files = files,
+                Files = files, Orders = SnapshotOrders(),
             };
             byte[] bytes = EncodeDecisionSet(decisions);
             string recoveryRoot = Path.Combine(SessionDir, "recovery", "session-" + Guid.NewGuid().ToString("N"));
@@ -247,12 +297,13 @@ public sealed partial class TaskSession
         return ExportWithArchiveLockCoreAsync(output, reviewer, expectedReviewSha256, ct);
     }
 
-    /// <summary>先由冻结引擎生成原始确认记录，再在同一把锁内生成客户样式文件。</summary>
-    public Task<ValidationDto> ExportQuotationWithArchiveLockAsync(string output, string reviewer, string? expectedReviewSha256, CancellationToken ct = default)
+    /// <summary>在同一把锁内生成受守护程序校验的确认记录和客户样式文件。</summary>
+    public Task<ValidationDto> ExportQuotationWithArchiveLockAsync(string output, string reviewer, string? expectedReviewSha256, CancellationToken ct = default,
+        string? allowBlankTreatmentFor = null)
     {
         if (!ValidReviewHash(expectedReviewSha256))
             throw new ArgumentException("必须提供有效的复核表 SHA-256，请重新校验后再导出。", nameof(expectedReviewSha256));
-        return ExportWithArchiveLockCoreAsync(output, reviewer, expectedReviewSha256, ct, true);
+        return ExportWithArchiveLockCoreAsync(output, reviewer, expectedReviewSha256, ct, true, allowBlankTreatmentFor);
     }
 
     /// <summary>锁定刚写入的复核表并校验其哈希，直到校验引擎结束。</summary>
@@ -276,7 +327,7 @@ public sealed partial class TaskSession
         using (held.ReviewedFile)
         {
             ct.ThrowIfCancellationRequested();
-            var result = await Engine.ValidateAsync(Kind, Manifest, reviewPath, ct).ConfigureAwait(false);
+            var result = await Engine.ValidateAsync(Kind, Manifest, reviewPath, ct, compatibleTreatmentPolicy: true).ConfigureAwait(false);
             ct.ThrowIfCancellationRequested();
             if (result == null || !string.Equals(result.ReviewSha256, expectedSha256, StringComparison.OrdinalIgnoreCase))
             {
@@ -291,7 +342,7 @@ public sealed partial class TaskSession
     static bool ValidReviewHash(string? hash) => hash != null && hash.Length == 64 && hash.All(Uri.IsHexDigit);
 
     async Task<ValidationDto> ExportWithArchiveLockCoreAsync(string output, string reviewer, string? expectedReviewSha256, CancellationToken ct,
-        bool quotationStyle = false)
+        bool quotationStyle = false, string? allowBlankTreatmentFor = null)
     {
         var held = await AcquireReviewLocksAsync(expectedReviewSha256, ct, ReviewedPath).ConfigureAwait(false);
         using (held.Manifest)
@@ -308,7 +359,7 @@ public sealed partial class TaskSession
                 Directory.CreateDirectory(output);
                 engineFolder = Path.Combine(output, "复核记录");
             }
-            var result = await Engine.ExportAsync(Kind, Manifest, ReviewedPath, engineFolder, reviewer, ct).ConfigureAwait(false);
+            var result = await Engine.ExportAsync(Kind, Manifest, ReviewedPath, engineFolder, reviewer, ct, compatibleTreatmentPolicy: true, allowBlankTreatmentFor: allowBlankTreatmentFor).ConfigureAwait(false);
             result.VerifiedFormattedSha256 = null;
             result.VerifiedAssociationSha256 = null;
             if (quotationStyle && result.Status == "ready")
@@ -424,21 +475,22 @@ public sealed partial class TaskSession
                 if (!files.TryGetValue(row.FileId, out var fileDecision) || fileDecision.State != "不纳入本次")
                     problems.Add($"{row.Id}: 图面打X的明细要纳入时，请在表格中把这一行的处理方式改为“采用图纸”或“人工修订”。");
             if (problems.Count != 0) return problems;
-            // An empty confirmation cell means "use the original" to existing
-            // frozen engines. A user-cleared value must never silently revert
-            // or be emitted as the internal draft marker.
+            // An empty confirmation inherits the original. Only the new
+            // treatment policy can carry an intentional clear as unresolved;
+            // no other cleared draft field can be silently restored.
             foreach (var row in Items.Where(r => r.HasClearedOverride))
             {
                 bool excluded = row.Mode == Rules.Exclude ||
                     (files.TryGetValue(row.FileId, out var fileDecision) && fileDecision.State == "不纳入本次");
-                if (!excluded)
-                    problems.Add($"{row.Id}: 已清空 {string.Join("、", row.ClearedFieldNames)}；请填写有效值或恢复识别值后再导出（现有引擎不支持将已有名称改为空）。");
+                var blockedFields = row.ClearedFieldNames.Where(name => Kind != EngineKind.Segmented || name != "表面处理").ToList();
+                if (!excluded && blockedFields.Count != 0)
+                    problems.Add($"{row.Id}: 已清空 {string.Join("、", blockedFields)}；请填写有效值或恢复识别值后再导出。");
                 else if (items.TryGetValue(row.Id, out var decision))
                 {
                     if (decision.DrawingNumber == ItemRow.ClearOverride) decision.DrawingNumber = "";
                     if (decision.Name == ItemRow.ClearOverride) decision.Name = "";
                     if (decision.Material == ItemRow.ClearOverride) decision.Material = "";
-                    if (decision.Treatment == ItemRow.ClearOverride) decision.Treatment = "";
+                    if (decision.Treatment == ItemRow.ClearOverride) decision.Treatment = excluded ? "" : TreatmentPolicy.PendingEntry;
                     if (decision.Quantity == ItemRow.ClearOverride) decision.Quantity = "";
                     if (decision.Unit == ItemRow.ClearOverride) decision.Unit = "";
                 }
@@ -464,7 +516,7 @@ public sealed partial class TaskSession
             var temp = Path.Combine(dir, ".review-" + Guid.NewGuid().ToString("N") + ".xlsx");
             try
             {
-                ReviewIo.Write(SourceXlsx, temp, items, files, problems);
+                ReviewIo.Write(SourceXlsx, temp, items, files, problems, Items.Select(row => row.Id).ToArray());
                 if (problems.Count != 0) return problems;
                 string hash;
                 using (var stream = new FileStream(temp, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
@@ -563,6 +615,22 @@ public sealed partial class TaskSession
             saved.Files.Any(kv => !fileIds.Contains(kv.Key) || kv.Value == null || !Rules.FileStates.Contains(kv.Value.State) ||
                 kv.Value.Note == null || kv.Value.ParentChildNote == null))
             throw new InvalidDataException("复核存档包含不属于当前任务或无效的记录。");
+        if (saved.Orders != null)
+        {
+            if (!properties.TryGetValue("Orders", out var ordersObject) || ordersObject.ValueKind != JsonValueKind.Object)
+                throw new InvalidDataException("复核存档的顺序格式无效。");
+            foreach (var record in UniqueProperties(ordersObject, StringComparer.Ordinal).Values)
+                UniqueProperties(record, StringComparer.OrdinalIgnoreCase);
+            var byFile = Data.Items.ToLookup(r => r.FileId, r => r.Id, StringComparer.Ordinal);
+            foreach (var (fileId, order) in saved.Orders)
+            {
+                var expected = byFile[fileId].ToHashSet(StringComparer.Ordinal);
+                if (!fileIds.Contains(fileId) || order?.Ids == null ||
+                    order.Mode is not (ReviewOrder.Horizontal or ReviewOrder.Vertical or ReviewOrder.Manual) ||
+                    expected.Count != order.Ids.Length || !expected.SetEquals(order.Ids))
+                    throw new InvalidDataException("复核存档的记录顺序不属于当前图纸。");
+            }
+        }
         var hasRevision = properties.TryGetValue("ArchiveRevision", out var revision);
         var hasChecksum = properties.TryGetValue("ArchiveContentSha256", out var checksum);
         if (saved.Schema == 2 && (!hasRevision || !hasChecksum))
@@ -589,9 +657,14 @@ public sealed partial class TaskSession
 
     static byte[] EncodeDecisionSet(DecisionSet decisions) => JsonSerializer.SerializeToUtf8Bytes(new
     {
-        decisions.Schema, decisions.TaskId, decisions.ManifestSha256, decisions.SavedUtc, decisions.Items, decisions.Files,
+        decisions.Schema, decisions.TaskId, decisions.ManifestSha256, decisions.SavedUtc, decisions.Items, decisions.Files, decisions.Orders,
         ArchiveRevision = Guid.NewGuid().ToString("N"), ArchiveContentSha256 = DecisionContentHash(decisions),
-    }, Json.Options);
+    }, ArchiveOptions);
+
+    static readonly JsonSerializerOptions ArchiveOptions = new(Json.Options)
+    {
+        DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull,
+    };
 
     string? TryWriteRecovery(DecisionSet decisions)
     {
@@ -600,7 +673,7 @@ public sealed partial class TaskSession
             // SavedUtc changes on every retry; do not produce repeated copies when
             // the actual in-memory decisions have not changed.
             var contentHash = Hash(JsonSerializer.SerializeToUtf8Bytes(new
-                { decisions.TaskId, decisions.ManifestSha256, decisions.Items, decisions.Files }, Json.Options));
+                { decisions.TaskId, decisions.ManifestSha256, decisions.Items, decisions.Files, decisions.Orders }, Json.Options));
             if (contentHash == _lastRecoveryContentHash && _lastRecoveryPath != null && File.Exists(_lastRecoveryPath))
                 return _lastRecoveryPath;
             var dir = Path.Combine(SessionDir, "recovery");

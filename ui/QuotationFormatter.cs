@@ -33,7 +33,7 @@ public static class QuotationFormatter
         ["样本", "图号", "部品名", "材质", "表面处理", "数量", "单位", "单价", "金额", "复核说明", "原图文件", "记录ID"];
 
     private sealed record ConfirmedRow(string Id, string FileId, string DrawingNumber, string? Name,
-        string Material, string Treatment, decimal Quantity, string Unit, string Reason, string FileName);
+        string Material, string? Treatment, decimal Quantity, string Unit, string Reason, string FileName);
 
     /// <summary>
     /// Called while TaskSession still holds its review/archive locks, after the guarded
@@ -293,6 +293,27 @@ public static class QuotationFormatter
             if (file == null || string.IsNullOrEmpty(file.Id) || !files.TryAdd(file.Id, file))
                 throw new InvalidDataException("来源数据存在缺失或重复的文件标识。");
 
+        var exceptions = new Dictionary<string, TreatmentExportException>(StringComparer.Ordinal);
+        if (record.TryGetProperty("treatment_exceptions", out _))
+        {
+            var recorded = Property(record, "treatment_exceptions", JsonValueKind.Array);
+            SameArray(recorded, Property(validation, "treatment_exceptions", JsonValueKind.Array));
+            if (!(recorded.Deserialize<List<TreatmentExportException>>(Json.Options) ?? [])
+                .SequenceEqual(result.TreatmentExceptions))
+                throw new InvalidDataException("表面处理留空明细与校验结果不一致。");
+            foreach (var issue in result.TreatmentExceptions)
+                if (!TreatmentPolicy.NeedsBlankApproval(issue.Disposition) || !exceptions.TryAdd(issue.Id, issue))
+                    throw new InvalidDataException("表面处理留空记录无效。");
+            var approval = NullableText(record, "blank_treatment_approved_review_sha256");
+            if (approval != NullableText(validation, "blank_treatment_approved_review_sha256") ||
+                approval != result.BlankTreatmentApprovedReviewSha256 ||
+                (exceptions.Count == 0 ? approval != null : approval == null))
+                throw new InvalidDataException("表面处理留空确认与本次导出不一致。");
+            if (approval != null) SameHash(approval, result.ReviewSha256);
+        }
+        else if (result.TreatmentExceptions.Count != 0 || result.BlankTreatmentApprovedReviewSha256 != null)
+            throw new InvalidDataException("缺少表面处理留空确认记录。");
+
         var covered = new HashSet<string>(StringComparer.Ordinal);
         var rows = new List<ConfirmedRow>(accepted.GetArrayLength());
         foreach (var entry in accepted.EnumerateArray())
@@ -311,9 +332,21 @@ public static class QuotationFormatter
                 !parents.EnumerateArray().Select(x => x.ValueKind == JsonValueKind.String ? x.GetString() : null).SequenceEqual(item.Parents))
                 throw new InvalidDataException("纳入明细的范围来源不一致。");
             var final = Property(entry, "final", JsonValueKind.Object);
-            string number = Text(final, "drawing_number"), material = Text(final, "material"), treatment = Text(final, "treatment");
+            string number = Text(final, "drawing_number"), material = Text(final, "material");
+            string? treatment = NullableText(final, "treatment");
+            string disposition = entry.TryGetProperty("treatment_disposition", out _)
+                ? Text(entry, "treatment_disposition") : TreatmentPolicy.Confirmed;
+            bool notedException = exceptions.Remove(id, out var issue);
+            bool validTreatment = disposition switch
+            {
+                TreatmentPolicy.Confirmed => TreatmentPolicy.HasConfirmedValue(treatment) && !notedException,
+                TreatmentPolicy.NotRequired => treatment == null && mode == Rules.Revise && !notedException,
+                TreatmentPolicy.Missing or TreatmentPolicy.Unconfirmed => treatment == null && notedException &&
+                    issue!.FileId == fileId && issue.DrawingNumber == number && issue.Disposition == disposition,
+                _ => false,
+            };
             string unit = Text(final, "unit"); decimal quantity = NullableNumber(final, "quantity") ?? throw new InvalidDataException("确认数量为空。");
-            if (!Rules.Meaningful(number) || !Rules.Meaningful(material) || !Rules.Meaningful(treatment) ||
+            if (!Rules.Meaningful(number) || !Rules.Meaningful(material) || !validTreatment ||
                 !Rules.Meaningful(unit) || quantity < 0)
                 throw new InvalidDataException("确认值不完整，或单位不能安全显示。");
             _ = QuantityFormat(quantity, unit); // Retain the existing unit-safety guard for the audit record.
@@ -330,6 +363,7 @@ public static class QuotationFormatter
             if (!covered.Add(id) || !items.TryGetValue(id, out var item) || item.FileId != fileId || !files.ContainsKey(fileId))
                 throw new InvalidDataException("排除明细与来源数据不一致。");
         }
+        if (exceptions.Count != 0) throw new InvalidDataException("表面处理留空记录未与纳入明细对应。");
         if (covered.Count != items.Count) throw new InvalidDataException("审计记录未覆盖全部来源明细。");
         return rows;
     }
