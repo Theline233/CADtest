@@ -5,12 +5,13 @@
  *
  * Keep text/rawText unchanged; normalization is for matching only. Unknown
  * processes, negation, alternatives and local scopes block the scalar value.
- * Several distinct operations are never silently concatenated into one finish.
+ * Only independently numbered, unambiguous supported operations can be grouped.
  */
-export const TREATMENT_RULE_VERSION = 'treatment-20261109.1';
+export const TREATMENT_RULE_VERSION = 'treatment-20261125.1';
 
 const rules = [
-  ['hard_chrome', '镀硬铬', /경질\s*크롬\s*도금|\bHARD[\s-]+CHROM(?:E|IUM)[\s-]+(?:PLATING|PLATED|COATING)\b|镀硬铬|硬铬(?:电镀|镀层)/iu],
+  ['hard_chrome', '镀硬铬', /경질\s*크롬\s*도금|\bHARD[\s-]+CHROM(?:E|IUM)[\s-]+(?:PLATING|PLATED|COATING)\b|镀硬铬|硬质镀铬|硬(?:质)?铬(?:电镀|镀层)/iu],
+  ['chrome', '镀铬', /크롬\s*도금|\bCHROM(?:E|IUM)[\s-]+(?:PLATING|PLATED|COATING)\b|镀铬/iu],
   ['alkaline_blue_white_zinc_explicit', '镀碱性蓝白锌', /(?:镀)?碱性蓝白锌/iu],
   ['white_zinc', '镀白锌', /\b(?:ZINC[\s-]+WHITE[\s-]+(?:COATING|PLATING)|WHITE[\s-]+ZINC[\s-]+(?:PLATING|COATING|COATED|PLATED))\b|백색\s*아연\s*도금|镀白锌|白色镀锌/iu],
   ['black_oxide', '发黑', /\bBLACK\s+OXIDE\b|\bBLACKEN(?:ING|ED)?\b|发黑/iu],
@@ -28,16 +29,17 @@ const rules = [
   ['annealing', '退火', /退火|\bANNEAL(?:ING|ED)?\b/iu],
   ['normalizing', '正火', /正火|\bNORMALI[ZS](?:ING|ED)\b/iu],
   ['carburizing', '渗碳', /渗碳|\bCARBURI[ZS](?:ING|ED)\b/iu],
-  ['nitriding', '氮化', /氮化|\bNITRID(?:ING|ED)\b/iu],
+  ['nitriding_heat_treatment', '氮化热处理', /질화\s*열\s*처리|氮化热处理|\bNITRIDING[\s-]+HEAT[\s-]+TREATMENT\b/iu],
+  ['nitriding', '氮化', /氮化|질화|\bNITRID(?:ING|ED)\b/iu],
   ['ral_color', null, /\bRAL\s*[-:]?\s*\d{4}(?!\d)/iu, 'color'],
 ];
 
 // Broad hints retain unsupported requests for review, rather than inventing a
 // process (e.g. unspecified nickel plating is NOT electroless nickel).
-const processHint = /\b(?:COAT(?:ING|ED)?|PLAT(?:ING|ED)|ANODI[ZS]\w*|BLACKEN\w*|OXIDE|PAINT\w*|GALVAN\w*|RAL|SURFACE\s+(?:TREATMENT|FINISH)|HEAT[\s-]+TREAT\w*|QUENCH\w*|TEMPER(?:ING|ED)|ANNEAL\w*|NORMALI[ZS]\w*|CARBURI[ZS]\w*|NITRID\w*|UNPLATED|UNCOATED|UNTREATED|UNANODI[ZS]ED)\b|도금|도장|표면\s*처리|열처리|고주파\s*소입|아노다이징|양극\s*산화|镀|氧化|发黑|喷砂|喷塑|喷漆|涂装|表面处理|热处理|淬火|回火|调质|退火|正火|渗碳|氮化/iu;
-const negation = /\b(?:NO|NOT|NEVER|WITHOUT|EXCEPT|EXCLUDING|OMIT|AVOID|PROHIBITED|FORBIDDEN|UNPLATED|UNCOATED|UNTREATED|UNANODI[ZS]ED|DELETE[DS]?|CANCEL(?:LED|ED)?|REMOVE[DS]?)\b|\bNON[\s-]*(?:ANODI[ZS]ED|PLATED|COATED|HEAT[\s-]*TREATED)\b|\bDON['’]?T\b|禁止|严禁|不得|不可|不允许|无需|无须|不需|不要|不进行|不做|不镀|不喷|不涂|不发黑|不氧化|不淬火|不回火|不热处理|免镀|免热处理|无镀层|无涂层|无热处理|无表面处理|取消|删除|作废|未镀|除外|除.+外|하지\s*(?:말|않)|하지마|금지|생략|불필요|제외|삭제|취소|미\s*도금|무\s*도금|비\s*도금|안\s*(?:함|하|할|도금|열처리)|도금\s*(?:없|불가)|열처리\s*없|없음/iu;
+const processHint = /\b(?:COAT(?:ING|ED)?|PLAT(?:ING|ED)|ANODI[ZS]\w*|BLACKEN\w*|OXIDE|PAINT\w*|GALVAN\w*|RAL|SURFACE\s+(?:TREATMENT|FINISH)|HEAT[\s-]+TREAT\w*|QUENCH\w*|TEMPER(?:ING|ED)|ANNEAL\w*|NORMALI[ZS]\w*|CARBURI[ZS]\w*|NITRID\w*|UNPLATED|UNCOATED|UNTREATED|UNANODI[ZS]ED)\b|질화|도금|도장|표면\s*처리|열처리|고주파\s*소입|아노다이징|양극\s*산화|镀|氧化|发黑|喷砂|喷塑|喷漆|涂装|表面处理|热处理|淬火|回火|调质|退火|正火|渗碳|氮化/iu;
+const negation = /\b(?:NO|NOT|NEVER|WITHOUT|EXCEPT|EXCLUDING|OMIT|AVOID|PROHIBITED|FORBIDDEN|UNPLATED|UNCOATED|UNTREATED|UNANODI[ZS]ED|DELETE[DS]?|CANCEL(?:LED|ED)?|REMOVE[DS]?)\b|\bNON[\s-]*(?:ANODI[ZS]ED|PLATED|COATED|HEAT[\s-]*TREATED|HARD[\s-]+CHROM(?:E|IUM))\b|\bDON['’]?T\b|禁止|严禁|不得|不可|不允许|无需|无须|不需|不要|不进行|不做|不镀|不喷|不涂|不发黑|不氧化|不淬火|不回火|不热处理|免镀|免热处理|无镀层|无涂层|无热处理|无表面处理|取消|删除|作废|未镀|非硬质镀铬|除外|除.+外|하지\s*(?:말|않)|하지마|금지|생략|불필요|제외|삭제|취소|미\s*도금|무\s*도금|비\s*도금|안\s*(?:함|하|할|도금|열처리)|도금\s*(?:없|불가)|열처리\s*없|없음/iu;
 const uncertainty = /[?？]|待定|待确认|待核|暂定|任选|可选|按需|或者?|另见|参见|见图|\b(?:TBD|TBC|OPTIONAL|MAY|OR|IF|UNSPECIFIED|AS\s+REQUIRED|REFER\s+TO|SEE\s+(?:NOTE|DRAWING))\b|추후|미정|선택|또는|혹은|필요\s*시|도면\s*참조/iu;
-const partialScope = /열처리\s*부(?![가-힣])|표시부|지시부|부분|해당부|일부|부위|내측|외측|내부|외부|한쪽|양측|양쪽|상부|하부|용접부|\b(?:ONLY|LOCAL(?:LY)?|MARKED|INDICATED|PARTIAL|AREA|REGION|ZONE|BORE|HOLES?|THREADS?|INSIDE|OUTSIDE|INNER|OUTER|SURFACE\s+[A-Z]|SIDE\s+[A-Z])\b|局部|部分|标示|标记|标注部|指定区域|孔内|内孔|螺纹|外表面|内表面|内侧|外侧|[A-Z]面|仅|只限/iu;
+const partialScope = /열처리\s*부(?![가-힣])|표시부|지시부|부분|국부|국소|해당부|일부|부위|내측|외측|내부|외부|한쪽|양측|양쪽|상부|하부|용접부|\b(?:ONLY|LOCAL(?:LY)?|MARKED|INDICATED|PARTIAL|SELECTIVE(?:LY)?|MASK(?:ED|ING)?|AREA|REGION|ZONE|BORE|HOLES?|THREADS?|INSIDE|OUTSIDE|INNER|OUTER|SURFACE\s+[A-Z]|SIDE\s+[A-Z])\b|局部|部分|标示|标记|标注部|指定区域|孔内|内孔|螺纹|外表面|内表面|内侧|外侧|[A-Z]面|仅|只限/iu;
 const stock = /도금\s*판|열처리\s*(?:연마\s*)?봉|(?:镀锌|镀镍|镀铬|镀层)板|热处理(?:研磨棒|磨光棒|棒料|棒材)|\b(?:PRE[\s-]?(?:PLATED|COATED)|(?:PLATED|COATED)\s+(?:SHEET|STOCK|PLATE)|HEAT[\s-]+TREATED\s+(?:GROUND\s+)?(?:BAR|STOCK|ROD))\b/iu;
 // Kanigen is a named process; retain the original name and require review
 // rather than silently substituting an unspecified generic nickel finish.
@@ -46,13 +48,58 @@ const genericLabels = /\bSURFACE\s+(?:TREATMENT|FINISH)\s*:?[\s]*|(?:表面处�
 const paintWords = /\b(?:PAINT(?:ED|ING)?|COAT(?:ING|ED)?)\b|도장|涂装|喷漆|喷塑/giu;
 // Include compact labels such as HRC45 and the original lower/upper-bound
 // wording; dropping 이상/以上 would turn a minimum into an exact value.
-const parameter = /(?:\b(?:HRC|HV|HB)(?![A-Z])|\bTHICKNESS\b|厚度|膜厚|두께)\s*[:=]?\s*(?:>=|<=|[<>≤≥])?\s*\d+(?:\.\d+)?(?:\s*[-~～]\s*\d+(?:\.\d+)?)?(?:\s*(?:μm|um|mm|微米))?(?:\s*(?:이상|이하|초과|미만|以上|以下|以内|以內))?|\d+(?:\.\d+)?\s*(?:μm|um|microns?|微米)\b/giu;
+const parameter = /(?:\b(?:HRC|HV|HB)(?![A-Z])|\bTHICKNESS\b|厚度|膜厚|두께)\s*[:=]?\s*(?:>=|<=|[<>≤≥])?\s*\d+(?:\.\d+)?(?:\s*[-~～–—]\s*\d+(?:\.\d+)?)?(?:\s*(?:μm|um|mm|微米))?(?:\s*(?:이상|이하|초과|미만|以上|以下|以内|以內))?|\d+(?:\.\d+)?\s*(?:μm|um|microns?|微米)\b/giu;
 
 function parameterKey(raw) {
   const type = /^(HRC|HV|HB)/iu.exec(raw)?.[0].toUpperCase() ?? 'thickness';
   const value = raw.replace(/^(?:HRC|HV|HB|THICKNESS|厚度|膜厚|두께)\s*[:=]?/iu, '')
     .replace(/\s+/gu, '').toUpperCase().replace(/Μ/gu, 'U');
-  return {type, value};
+  return {type, value: type === 'HRC' ? value.replace(/[~～–—]/gu, '-') : value};
+}
+
+const readParameters = text => [...text.matchAll(parameter)].map(m => m[0]);
+const notePrefix = /^\s*(\d{1,3})[.)、]\s*/u;
+const dimensionDefault = /^(\s*(?:\d{1,3}[.)、]\s*)?)UNSPECIFIED(?=\s+(?:DIMENSIONS?\s+TOLERANCES?|DIMENSIONAL\s+TOLERANCES?|CHAMFER(?:ING)?)\b)/iu;
+
+function closedHrcRange(parameters) {
+  if (parameters.length !== 1) return null;
+  const parsed = parameterKey(parameters[0]);
+  if (parsed.type !== 'HRC') return null;
+  const range = /^(\d{1,3}(?:\.\d{1,2})?)-(\d{1,3}(?:\.\d{1,2})?)$/u.exec(parsed.value);
+  if (!range || !(Number(range[1]) < Number(range[2])) || Number(range[2]) > 100) return null;
+  return `HRC ${Number(range[1])}–${Number(range[2])}`;
+}
+
+// A verified note must contain nothing beyond a process, its parameter (if
+// supported), and a note number/label. Do not turn an unfamiliar modifier
+// (e.g. a different plating chemistry or an HRC suffix) into a clean value.
+function processClause(clause, matches, parameters, remainder) {
+  if (matches.length !== 1) return null;
+  const {rule, value} = matches[0];
+  const note = notePrefix.exec(clause);
+  const label = remainder.replace(notePrefix, '').replace(parameter, '').replace(/\.\s*$/u, '');
+  const plain = /^[\s,，:：()]*$/u.test(label);
+  const range = rule === 'nitriding_heat_treatment' ? closedHrcRange(parameters) : null;
+  return {
+    rule, note: note ? Number(note[1]) : null, plain, range,
+    display: parameters.length ? `${value}（${range ?? parameters.join('、')}）` : value,
+  };
+}
+
+function numberedGroup(clauses) {
+  // Only this combination of independent operation types is supported so far.
+  // Do not infer process order for an unnumbered list, stitch notes across
+  // frames, or assume that other combinations of coatings are compatible.
+  const slots = new Map();
+  for (const clause of clauses) {
+    if (!clause?.plain || clause.note == null) return null;
+    if (!(clause.rule === 'chrome' || (clause.rule === 'nitriding_heat_treatment' && clause.range))) return null;
+    const previous = slots.get(clause.note);
+    if (previous && previous.display !== clause.display) return null;
+    slots.set(clause.note, clause);
+  }
+  if (slots.size !== 2 || new Set([...slots.values()].map(c => c.rule)).size !== 2) return null;
+  return [...slots.entries()].sort(([a], [b]) => a - b).map(([, c]) => c.display);
 }
 
 function matchesIn(text) {
@@ -81,32 +128,45 @@ function matchesIn(text) {
 
 /**
  * @param {string|object|Array<string|object>} input Native text records (or text).
- * @returns {{value: string|null, candidates: string[], evidence: object[], issues: string[], rule_version: string, status: string}}
- * candidates include mentioned, negated and scoped processes; ONLY value is a
- * resolved scalar. A nonempty issues list always makes value null.
+ * @returns {{value: string|null, candidates: string[], evidence: object[], issues: string[], rule_version: string, status: string, value_includes_parameters: boolean}}
+ * Candidates include mentioned, negated and scoped processes. Only value can
+ * be a recognized field; a nonempty issues list always makes it null.
  */
 export function extractTreatment(input) {
   const records = Array.isArray(input) ? input : input == null ? [] : [input];
-  const candidates = new Set(), issues = new Set(), evidence = [], constraints = new Map(), scopes = new Set();
+  const candidates = new Set(), processRules = new Set(), processNames = new Set(), issues = new Set(), evidence = [];
+  const constraints = new Map(), scopes = new Set(), processClauses = [], detachedParameters = [];
   for (const item of records) {
     const record = typeof item === 'string' ? {text: item} : item;
     if (!record || typeof record.text !== 'string') continue;
     const normalized = record.text.normalize('NFKC');
-    if (!processHint.test(normalized) && !matchesIn(normalized).length) continue;
+    const rawClauses = normalized.split(/\r?\n|[;；。]/u);
+    if (!processHint.test(normalized) && !matchesIn(normalized).length) {
+      // A hardness-only text entity in this frame may qualify a nearby note;
+      // preserve it but do not silently assign it to a verified operation.
+      const standalone = normalized.replace(notePrefix, '').trim();
+      const parameters = /^HRC(?![A-Z])/iu.test(standalone) ? readParameters(standalone) : [];
+      if (parameters.length) detachedParameters.push({record, normalized, parameters});
+      continue;
+    }
     const localIssues = new Set(), clauses = [];
     if (record.textRequiresReview) localIssues.add('source_text_requires_review');
-    if (negation.test(normalized)) localIssues.add('negation_or_exclusion');
-    if (uncertainty.test(normalized)) localIssues.add('uncertain_instruction');
-    if (stock.test(normalized)) localIssues.add('pretreated_stock_not_part_finish');
-    if (variant.test(normalized)) localIssues.add('treatment_variant_requires_review');
+    const context = rawClauses.map(c => processHint.test(c) ? c : c.replace(dimensionDefault, '$1')).join('\n');
+    const detachedChromeVariant = rawClauses.some(c => /^\s*\(?\s*(?:HARD|경질|硬质)\s*\)?\s*$/iu.test(c));
+    if (negation.test(context)) localIssues.add('negation_or_exclusion');
+    if (uncertainty.test(context)) localIssues.add('uncertain_instruction');
+    if (stock.test(context)) localIssues.add('pretreated_stock_not_part_finish');
+    if (variant.test(context)) localIssues.add('treatment_variant_requires_review');
+    if (partialScope.test(context) && matchesIn(normalized).some(m =>
+      ['chrome', 'hard_chrome', 'nitriding_heat_treatment'].includes(m.rule))) localIssues.add('scope_requires_review');
     if (record.scope != null) {
       scopes.add(String(record.scope));
       if (!['frame_notes', 'whole_part', 'entire_part', 'all', 'unspecified'].includes(String(record.scope))) localIssues.add('scope_requires_review');
     }
     // Do not split decimal thickness values or numbered note prefixes at '.'.
-    for (const clause of normalized.split(/\r?\n|[;；。]/u)) {
+    for (const clause of rawClauses) {
       const matches = matchesIn(clause);
-      const parameters = [...clause.matchAll(new RegExp(parameter.source, parameter.flags))].map(m => m[0]);
+      const parameters = readParameters(clause);
       if (!matches.length && !processHint.test(clause)) {
         // Preserve a separate parameter in this process-bearing source record,
         // but do not invent which process or material it belongs to.
@@ -129,28 +189,68 @@ export function extractTreatment(input) {
       // RAL remains a color specification, never an inferred paint process.
       if (matches.some(m => m.kind === 'color')) unmatched = unmatched.replace(paintWords, '');
       if (!matches.length || processHint.test(unmatched)) localIssues.add('unrecognized_treatment');
+      const operation = processClause(clause, matches, parameters, unmatched);
+      processClauses.push(operation);
+      if (operation?.rule === 'chrome' && (!operation.plain || parameters.length || detachedChromeVariant) && !localIssues.size)
+        localIssues.add('treatment_variant_requires_review');
+      if (parameters.length && matches.length > 1) localIssues.add('parameter_scope_requires_review');
       for (const match of matches) {
-        candidates.add(match.value);
-        if (parameters.length) {
-          const values = constraints.get(match.value) ?? new Set();
-          values.add(parameters.map(p => { const v = parameterKey(p); return `${v.type}:${v.value}`; }).sort().join('|'));
-          constraints.set(match.value, values);
+        processRules.add(match.rule);
+        processNames.add(match.value);
+        candidates.add(operation?.display ?? match.value);
+        const values = constraints.get(match.rule) ?? new Set();
+        if (operation && (parameters.length || ['chrome','nitriding_heat_treatment'].includes(match.rule))) {
+          values.add(operation.range ?? parameters.map(p => { const v = parameterKey(p); return `${v.type}:${v.value}`; }).sort().join('|'));
+          constraints.set(match.rule, values);
         }
       }
       clauses.push({normalized_text: clause, matches, parameters,
         scope_requires_review: partialScope.test(clause)});
     }
     for (const issue of localIssues) issues.add(issue);
-    const original = {};
-    for (const key of ['id', 'text', 'rawText', 'layout', 'blockPath', 'handle', 'position', 'scope', 'textRequiresReview']) {
-      if (Object.hasOwn(record, key)) original[key] = structuredClone(record[key]);
-    }
-    evidence.push({...original, normalized_text: normalized, clauses, issues: [...localIssues]});
+    evidence.push({...originalEvidence(record), normalized_text: normalized, clauses, issues: [...localIssues]});
   }
-  if (candidates.size > 1) issues.add('multiple_treatments_require_review');
+  if (processRules.has('chrome') || processRules.has('nitriding_heat_treatment')) {
+    for (const {record, normalized, parameters} of detachedParameters) {
+      issues.add('parameter_scope_requires_review');
+      evidence.push({...originalEvidence(record), normalized_text: normalized,
+        clauses: [{normalized_text: normalized, matches: [], parameters, scope_requires_review: true}],
+        issues: ['parameter_scope_requires_review']});
+    }
+  }
   if (scopes.size > 1) issues.add('scope_requires_review');
   if ([...constraints.values()].some(values => values.size > 1)) issues.add('parameters_require_review');
-  const value = candidates.size === 1 && !issues.size ? [...candidates][0] : null;
-  return {value, candidates: [...candidates], evidence, issues: [...issues], rule_version: TREATMENT_RULE_VERSION,
+  // Preserve the old behavior for equal translations of legacy names (e.g.
+  // Kanigen remains a variant), but do not treat competing parameter values
+  // as separate operations or prefer one of them.
+  const multiple = processNames.size > 1;
+  const group = multiple && !issues.size ? numberedGroup(processClauses) : null;
+  if (multiple && !group) issues.add('multiple_treatments_require_review');
+
+  let value = null, valueIncludesParameters = false;
+  if (!issues.size && group) {
+    value = group.join('；');
+    valueIncludesParameters = true;
+  } else if (!issues.size && candidates.size === 1) {
+    const [display] = candidates;
+    if (processClauses.every(c => c?.rule === 'nitriding_heat_treatment' && c.plain && c.range)) {
+      value = display;
+      valueIncludesParameters = true;
+    } else {
+      // Keep the legacy unqualified frame candidate. The predictor withholds
+      // parameter-bearing values unless the full parameter is in the field.
+      value = [...processNames][0] ?? null;
+    }
+  }
+  return {value, candidates: group ?? [...candidates], evidence, issues: [...issues], rule_version: TREATMENT_RULE_VERSION,
+    value_includes_parameters: valueIncludesParameters,
     status: value !== null ? 'recognized' : evidence.length ? 'needs_review' : 'not_found'};
+}
+
+function originalEvidence(record) {
+  const original = {};
+  for (const key of ['id', 'text', 'rawText', 'layout', 'blockPath', 'handle', 'position', 'scope', 'textRequiresReview']) {
+    if (Object.hasOwn(record, key)) original[key] = structuredClone(record[key]);
+  }
+  return original;
 }

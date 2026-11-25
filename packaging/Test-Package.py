@@ -55,6 +55,7 @@ def command(label,args,dotnet=False,timeout=360):
     checks.append(label);print('PASS '+label,flush=True)
     return logs
 app=root/'CadReviewUI.exe';python=root/'runtime/python/python.exe'
+command('homepage-without-powershell',[app,'--recognition-ui-test',root/'outputs/package-home'])
 support=root/'tests';support.mkdir()
 shutil.copy2(repo/'tests/make_ui_fixtures.py',support/'make_ui_fixtures.py')
 command('synthetic-fixtures',[python,'-B','-X','utf8',support/'make_ui_fixtures.py','outputs/package-fixtures'],dotnet=True)

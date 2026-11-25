@@ -115,6 +115,20 @@ public sealed class ItemRow : Notify
         _ => Src.Kind,
     };
     public bool IsCompleteOriginal => Rules.Complete(Src.Cad);
+    public string TreatmentReviewLabel
+    {
+        get
+        {
+            string disposition = TreatmentPolicy.Classify(OrigTreatment,
+                IsClear(ConfTreatment) ? TreatmentPolicy.PendingEntry : ConfTreatment.Trim(), Warnings, TreatmentEvidence);
+            return disposition switch
+            {
+                TreatmentPolicy.Confirmed => "",
+                TreatmentPolicy.NotRequired => "Excel 工艺栏留空",
+                _ => TreatmentPolicy.Label(disposition),
+            };
+        }
+    }
     public string MissingText => string.Join("、", Rules.MissingFields(Src.Cad));
 
     // —— 人工确认（可编辑）——
@@ -254,6 +268,7 @@ public sealed class ItemRow : Notify
         bool hadOverride = HasOverride;
         if (!Set(ref field, next, propertyName)) return;
         Raise(editableProperty);
+        if (editableProperty == nameof(EditTreatment)) Raise(nameof(TreatmentReviewLabel));
         Raise(nameof(HasOverride));
         Raise(nameof(HasClearedOverride));
         Raise(nameof(ClearedFieldNames));
@@ -263,7 +278,7 @@ public sealed class ItemRow : Notify
     void RaiseEditableFields()
     {
         Raise(nameof(EditDrawing)); Raise(nameof(EditName)); Raise(nameof(EditMaterial));
-        Raise(nameof(EditTreatment)); Raise(nameof(EditQuantity)); Raise(nameof(EditUnit));
+        Raise(nameof(EditTreatment)); Raise(nameof(TreatmentReviewLabel)); Raise(nameof(EditQuantity)); Raise(nameof(EditUnit));
         Raise(nameof(HasOverride)); Raise(nameof(HasClearedOverride)); Raise(nameof(ClearedFieldNames));
     }
 

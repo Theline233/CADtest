@@ -283,14 +283,15 @@ class ArrayElements:
                     yield obj, record
 
 
-def anchor_kind(text: str) -> tuple[bool, bool]:
+def anchor_kind(text: str, block_path: str) -> tuple[bool, bool]:
     text = require_string(text, "text")
     js = text.strip(JS_TRIM)
     conservative = text.strip(CONSERVATIVE_TRIM)
 
     def matches(value: str) -> bool:
         # The length guard avoids allocating an uppercase copy of a large text.
-        return value == "PART No." or (len(value) == 6 and value.upper() == "NUMBER")
+        return (value == "PART No." or (len(value) == 6 and value.upper() == "NUMBER")
+                or (value == "PART NAME STANDARD" and isinstance(block_path, str) and block_path.endswith("$0$부품 리스트")))
 
     return matches(js), matches(conservative)
 
@@ -453,7 +454,7 @@ def main(argv=None) -> int:
                 raise AuditError(f"{name}_bytes_mismatch_at_{left.count}")
             if name == "texts":
                 obj = lvalue[0]
-                exact, conservative = anchor_kind(obj.get("text"))
+                exact, conservative = anchor_kind(obj.get("text"), obj.get("blockPath"))
                 if conservative:
                     anchor = (require_string(obj.get("layout"), "text_layout"),
                               require_string(obj.get("blockPath"), "text_blockPath"))

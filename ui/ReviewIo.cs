@@ -93,7 +93,7 @@ public static class ReviewIo
 
     public static void Write(string sourceXlsx, string targetXlsx,
         IReadOnlyDictionary<string, ItemDecision> items, IReadOnlyDictionary<string, FileDecision> files,
-        List<string> problems)
+        List<string> problems, IReadOnlyList<string>? orderedIds = null)
     {
         using var book = new XLWorkbook(sourceXlsx);
         var expectedQuantities = new List<(int Row, string Id, decimal? Value)>();
@@ -103,6 +103,7 @@ public static class ReviewIo
             mat = Need(cols, "确认材质"), trt = Need(cols, "确认工艺"), qty = Need(cols, "确认数量"),
             unit = Need(cols, "确认单位"), note = Need(cols, "复核说明");
         int last = ws.LastRowUsed()?.RowNumber() ?? FirstRow - 1;
+        if (orderedIds != null) OrderRows(ws, cols, id, last, orderedIds);
         for (int r = FirstRow; r <= last; r++)
         {
             var rid = ws.Cell(r, id).GetString().Trim();
@@ -158,6 +159,9 @@ public static class ReviewIo
             using (var saved = new XLWorkbook(temp, new LoadOptions { RecalculateAllFormulas = false }))
             {
                 var savedSheet = saved.Worksheet(ReviewSheet);
+                if (orderedIds != null && !orderedIds.SequenceEqual(Enumerable.Range(FirstRow, Math.Max(0, last - FirstRow + 1))
+                    .Select(r => savedSheet.Cell(r, id).GetString().Trim()), StringComparer.Ordinal))
+                    throw new InvalidDataException("保存后的复核表记录顺序发生变化。");
                 foreach (var expected in expectedQuantities)
                 {
                     try
@@ -179,6 +183,33 @@ public static class ReviewIo
         {
             if (File.Exists(temp)) File.Delete(temp);
         }
+    }
+
+    static void OrderRows(IXLWorksheet sheet, Dictionary<string, int> columns, int idColumn, int last,
+        IReadOnlyList<string> orderedIds)
+    {
+        var current = Enumerable.Range(FirstRow, Math.Max(0, last - FirstRow + 1))
+            .Select(r => sheet.Cell(r, idColumn).GetString().Trim()).ToArray();
+        if (current.SequenceEqual(orderedIds, StringComparer.Ordinal)) return;
+        var rank = orderedIds.Select((id, i) => (id, i)).ToDictionary(x => x.id, x => x.i, StringComparer.Ordinal);
+        if (current.Length != rank.Count || current.Distinct(StringComparer.Ordinal).Count() != rank.Count ||
+            current.Any(id => !rank.ContainsKey(id)))
+            throw new InvalidDataException("复核表记录 ID 与保存的顺序不一致。");
+
+        // Sort the full record, including original fields, by a temporary
+        // rank. No extra column is persisted, so frozen validators read the
+        // same workbook schema, checking original cells by ID as before.
+        var heights = new double[current.Length];
+        int helper = columns.Values.Max() + 1;
+        for (int i = 0; i < current.Length; i++)
+        {
+            int target = rank[current[i]];
+            heights[target] = sheet.Row(FirstRow + i).Height;
+            sheet.Cell(FirstRow + i, helper).Value = target + 1;
+        }
+        sheet.Range(FirstRow, 1, last, helper).Sort(helper.ToString(CultureInfo.InvariantCulture));
+        sheet.Range(FirstRow, helper, last, helper).Clear(XLClearOptions.All);
+        for (int i = 0; i < heights.Length; i++) sheet.Row(FirstRow + i).Height = heights[i];
     }
 
     const string MetaSheet = "绑定信息", WorkerArg = "--cad-review-import-worker-v1";

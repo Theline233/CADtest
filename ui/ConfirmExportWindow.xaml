@@ -31,7 +31,7 @@
                         <TextBlock Text="请确认以下内容：" FontWeight="SemiBold" Foreground="#244256"/>
                         <TextBlock Margin="0,10,0,0" TextWrapping="Wrap" Foreground="#243D4D">
                             <Run Text="• 已对照原图核对："/><LineBreak/>
-                            <Run Text="　图号、名称、材质、表面处理、数量、单位与计入范围。"/>
+                            <Run Text="　图号、名称、材质、计入范围，以及已有的数量、单位和表面处理。"/>
                         </TextBlock>
                         <TextBlock Margin="0,9,0,0" TextWrapping="Wrap" Foreground="#243D4D"
                                    Text="• 已检查相同图号的重复图框是否应合并。"/>

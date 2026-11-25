@@ -40,6 +40,7 @@ public partial class MainWindow : Window
     internal Func<IReadOnlyList<ItemRow>, string?> CrossedReasonPrompt { get; set; }
     internal Func<ItemRow, IReadOnlyList<DsDuplicateOccurrence>, DsDuplicateOccurrence?> DuplicateChoicePrompt { get; set; }
     internal Func<string, TaskSession, SafeExportDestination?> DestinationSelector { get; set; }
+    internal Func<IReadOnlyList<string>?>? RecognitionFilePicker { get; set; }
     internal Action<string> OpenExportSelection { get; set; } = path =>
         Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"") { UseShellExecute = true });
     internal Action<SafeExportDestination, string, string, string?> RecordExportSelection { get; set; } =
@@ -329,8 +330,7 @@ public partial class MainWindow : Window
     void Window_Loaded(object sender, RoutedEventArgs e)
     {
         var notReady = Engine.CheckReady();
-        var noRecognize = Engine.RecognizeScript == null ? "找不到识别入口脚本 " + Engine.SegmentedScript
-            : Engine.FindShell() == null ? "找不到 PowerShell，无法启动识别。" : null;
+        var noRecognize = Engine.RecognitionStartupIssue();
         WelcomeNotice.Text = _isDemo ? "演示模式：仅预览，不能新建识别、调用 API、校验或导出。" : notReady ?? noRecognize ?? "";
         NewButton.IsEnabled = !_isDemo && notReady == null && noRecognize == null;
         LoadLayout();
@@ -514,13 +514,18 @@ public partial class MainWindow : Window
     // ───────────────────────── 新建识别 ─────────────────────────
     async void NewRecognize_Click(object sender, RoutedEventArgs e)
     {
-        if (_isDemo || _busy || _runCts != null || _recentRemoving) return;
+        if (_isDemo || _busy || _runCts != null || _recentRemoving || !NewButton.IsEnabled) return;
+        var drawings = RecognitionFilePicker != null ? RecognitionFilePicker() : PickDrawings();
+        if (drawings is { Count: > 0 }) await ImportDrawingsAsync(drawings);
+    }
+
+    IReadOnlyList<string>? PickDrawings()
+    {
         var dialog = new OpenFileDialog
         {
             Title = "选择要识别的 DWG 图纸（可多选）", Filter = "DWG 图纸 (*.dwg)|*.dwg", Multiselect = true, CheckFileExists = true,
         };
-        if (dialog.ShowDialog(this) != true) return;
-        await ImportDrawingsAsync(dialog.FileNames);
+        return dialog.ShowDialog(this) == true ? dialog.FileNames : null;
     }
 
     void Window_PreviewDragOver(object sender, DragEventArgs e)
@@ -544,7 +549,7 @@ public partial class MainWindow : Window
     }
 
     // File picker and drag-and-drop share admission and the same queue.
-    internal async Task ImportDrawingsAsync(IReadOnlyList<string> selected)
+    internal async Task ImportDrawingsAsync(IReadOnlyList<string> selected, ParallelLimits? parallelLimits = null)
     {
         if (_isDemo || _busy || _runCts != null || _recentRemoving) return;
         if (!SaveBeforeLeaving("导入图纸")) return;
@@ -582,6 +587,7 @@ public partial class MainWindow : Window
         _runCts = new CancellationTokenSource();
         var cts = _runCts;
         var failures = new List<string>();
+        var emptyDrawings = new List<string>();
         string? firstOpened = null;
         int succeeded = 0;
         bool cancelled = false;
@@ -600,7 +606,8 @@ public partial class MainWindow : Window
             {
                 usedParallel = true;
                 _parallelRunActive = true;
-                var result = await ImportParallelAsync(drawings, capability, failures, cts.Token);
+                var result = await ImportParallelAsync(drawings, capability, failures, emptyDrawings,
+                    parallelLimits ?? ParallelRecognition.Limits(), cts.Token);
                 succeeded = result.Succeeded;
                 firstOpened = result.FirstOpened;
             }
@@ -636,6 +643,7 @@ public partial class MainWindow : Window
                         continue;
                     }
                     if (!TryOpenTask(result.ReviewFolder)) { failures.Add(name + "：识别完成，但无法打开复核任务。"); continue; }
+                    if (HasNoDetails(result.ReviewFolder)) emptyDrawings.Add(name);
                     firstOpened ??= result.ReviewFolder;
                     succeeded++;
                 }
@@ -656,18 +664,26 @@ public partial class MainWindow : Window
         }
         if (firstOpened != null && (!usedParallel || _task == null)) TryOpenTask(firstOpened);
         string summary = $"已完成 {succeeded} / {drawings.Count} 张图纸。";
+        if (emptyDrawings.Count > 0)
+            summary = drawings.Count == 1 ? Engine.NoDetailsMessage :
+                summary + $" 其中 {emptyDrawings.Count} 张已读入但未提取到明细。";
         if (cancelled) summary += " 已取消剩余识别，已完成的任务仍保留。";
-        if (failures.Count > 0)
-            _showDialog(summary + "\n\n未完成：\n" + string.Join("\n", failures),
-                "部分图纸未完成", MessageBoxButton.OK, MessageBoxImage.Warning);
-        Status(summary);
+        if (failures.Count > 0 || (drawings.Count > 1 && emptyDrawings.Count > 0))
+        {
+            string report = summary;
+            if (failures.Count > 0) report += "\n\n未完成：\n" + string.Join("\n", failures);
+            if (emptyDrawings.Count > 0) report += "\n\n未提取到明细，请对照原图：\n" + string.Join("\n", emptyDrawings);
+            _showDialog(report, "识别结果", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        Status(summary, toast: emptyDrawings.Count == 0);
     }
 
+    bool HasNoDetails(string review) => _sessionCache.TryGetValue(Path.GetFullPath(review), out var task) && task.Items.Count == 0;
+
     async Task<(int Succeeded, string? FirstOpened)> ImportParallelAsync(IReadOnlyList<string> drawings,
-        ParallelCapability capability, List<string> failures, CancellationToken ct)
+        ParallelCapability capability, List<string> failures, List<string> emptyDrawings, ParallelLimits limits, CancellationToken ct)
     {
         int maxParallel = new RecognitionSettingsStore().Load();
-        var limits = ParallelRecognition.Limits();
         AppendLog($"批量资源：每任务内存上限 {limits.MemoryMiB} MiB，整机 CPU 预算 {limits.CpuPercent}%，单阶段超时 {limits.TimeoutSeconds} 秒；" +
             (maxParallel == 0 ? "并行数自动。" : $"最多同时 {maxParallel} 张。"));
         var staged = new List<string>();
@@ -712,6 +728,7 @@ public partial class MainWindow : Window
                     }
                     bool ok = firstOpened == null ? TryOpenTask(review) : RegisterCompletedTab(review);
                     if (!ok) { failures.Add(name + "：识别完成，但无法打开复核任务：" + review); continue; }
+                    if (HasNoDetails(review)) emptyDrawings.Add(name);
                     firstOpened ??= review;
                     opened++;
                     // Keep the progress/cancel panel available while allowing the
@@ -930,6 +947,7 @@ public partial class MainWindow : Window
         TitleText.Text = (_isDemo ? "演示 · " : "") + Path.GetFileNameWithoutExtension(task.Files[0].Name) +
             (task.Files.Count == 1 ? "" : $" 等 {task.Files.Count} 份");
         TitleText.ToolTip = $"{task.Data.Title} · {task.Data.Files.Count} 份图纸 · {task.Data.Items.Count} 条候选\n{task.Folder}";
+        MarkTreatmentNotRequiredButton.Visibility = task.Kind == EngineKind.Segmented ? Visibility.Visible : Visibility.Collapsed;
         ErrorList.ItemsSource = null;
         IssueCountRun.Text = "";
         ErrorTab.Header = "待处理问题";
@@ -941,11 +959,11 @@ public partial class MainWindow : Window
         UpdateStats();
         if (fromCache)
         {
-            Status("已切换到 " + tab.DisplayName, toast: false);
+            Status(task.Items.Count == 0 ? Engine.NoDetailsMessage : "已切换到 " + tab.DisplayName, toast: false);
             return true;
         }
         int crossedDefaults = task.Items.Count(r => r.IsCrossedOut && r.Mode == Rules.Exclude);
-        var loadStatus = task.LoadNote ?? (hadSaved ? "已载入上次保存的复核内容" :
+        var loadStatus = task.LoadNote ?? (task.Items.Count == 0 ? Engine.NoDetailsMessage : hadSaved ? "已载入上次保存的复核内容" :
             crossedDefaults > 0 ? $"已载入识别结果；{crossedDefaults} 条图面打X的明细默认不纳入，其余待复核。" : "已载入识别结果，所有明细均待复核");
         Status(loadStatus + (recentError == null ? "" : "；最近任务列表未更新：" + recentError), toast: false);
 
@@ -1224,7 +1242,7 @@ public partial class MainWindow : Window
         ReviewProgress.BeginAnimation(System.Windows.Controls.Primitives.RangeBase.ValueProperty,
             new System.Windows.Media.Animation.DoubleAnimation(total == 0 ? 0 : (double)done / total, TimeSpan.FromMilliseconds(500))
             { EasingFunction = SmoothEase });
-        ProgressText.Text = $"已处理 {done} / {total}";
+        ProgressText.Text = total == 0 ? "未提取到明细" : $"已处理 {done} / {total}";
         ProgressPercent.Text = total == 0 ? "" : $"{Math.Round(100.0 * done / total)}%";
         // 胶囊上的数字按当前图纸范围计算，不受搜索影响。
         var scope = FileList.SelectedItem is FileRow f ? _task.Items.Where(i => i.FileId == f.Id).ToList() : _task.Items.ToList();
@@ -1246,7 +1264,8 @@ public partial class MainWindow : Window
             FileList.SelectedItem is FileRow f ? f.Name + " · " : $"{_task.Files.Count} 张图纸 · ";
         StatsText.Text = $"{scope}共 {_task.Items.Count} 条" + (shown == _task.Items.Count ? "" : $"，显示 {shown} 条");
         ActiveTaskSummary = (_task.Files.Count > 1 ? $"{_task.Files.Count} 张图纸 · " : "") +
-            $"{_task.Items.Count} 条 · " + (c.Pending == 0 ? "已全部处理" : $"待复核 {c.Pending}");
+            (_task.Items.Count == 0 ? "未提取到明细" : $"{_task.Items.Count} 条 · " +
+                (c.Pending == 0 ? "已全部处理" : $"待复核 {c.Pending}"));
     }
 
     // 侧栏“已打开的图纸”中选中项下方显示的摘要。
@@ -1269,6 +1288,11 @@ public partial class MainWindow : Window
     void UpdateWorkflowHint()
     {
         if (_task == null || WorkflowHint == null) return;
+        if (_task.Items.Count == 0)
+        {
+            WorkflowHint.Text = Engine.NoDetailsMessage;
+            return;
+        }
         var excluded = _task.Files.Where(f => f.State == "不纳入本次").Select(f => f.Id).ToHashSet();
         int pending = _task.Items.Count(i => i.Mode == Rules.Pending && !excluded.Contains(i.FileId));
         var filesWithItems = _task.Items.Select(i => i.FileId).ToHashSet();
@@ -1286,7 +1310,7 @@ public partial class MainWindow : Window
         WorkflowHint.Text = pending > 0 && simplePending == pending
             ? $"请对照原图核对 {pending} 条明细，核对后点击右上角“确认并导出 Excel”。"
             : pending > 0
-            ? $"还有 {pending - simplePending} 条明细需要单独处理；有缺项请直接在表格中补全。"
+            ? $"还有 {pending - simplePending} 条明细需要单独处理。请核对原图，再选择采用、修订或不纳入。"
             : needDetails > 0
                 ? $"还有 {needDetails} 张图纸需要处理具体事项，请点击导出后按提示查看。"
             : filesToCheck.Count > 0
@@ -1482,14 +1506,18 @@ public partial class MainWindow : Window
         // 打X默认排除（用户未另行选择）的行视为可直接采用；用户自己设为不纳入的行不动。
         static bool DefaultCrossedExclusion(ItemRow r) => r.IsCrossedOut && r.Mode == Rules.Exclude &&
             string.Equals(r.Note.Trim(), r.Src.DefaultDecision?.Note?.Trim(), StringComparison.Ordinal);
-        var ok = rows.Where(r => r.IsCompleteOriginal && r.Mode != Rules.Revise &&
+        bool CanAdopt(ItemRow r) => r.IsCompleteOriginal ||
+            (_task?.Kind == EngineKind.Segmented && !r.IsCrossedOut &&
+             TreatmentPolicy.Classify(r.OrigTreatment, null, r.Warnings, r.TreatmentEvidence) != TreatmentPolicy.Conflict &&
+             (Rules.HardFieldsComplete(r.Src.Cad) || Rules.CanDeferQuantity(r.Src.Cad)));
+        var ok = rows.Where(r => CanAdopt(r) && r.Mode != Rules.Revise &&
             (r.Mode != Rules.Exclude || DefaultCrossedExclusion(r))).ToList();
         int revised = rows.Count(r => r.Mode == Rules.Revise);
         int excluded = rows.Count(r => r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r));
-        int missing = rows.Count(r => r.Mode != Rules.Revise && !(r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r)) && !r.IsCompleteOriginal);
+        int missing = rows.Count(r => r.Mode != Rules.Revise && !(r.Mode == Rules.Exclude && !DefaultCrossedExclusion(r)) && !CanAdopt(r));
         if (ok.Count == 0)
         {
-            _showDialog("选中的行里没有可以直接采用的：\n" + (missing > 0 ? $"· {missing} 行原值有缺项（图号/数量/单位/材质/工艺），请在表格中补全或设为不纳入。\n" : "") +
+            _showDialog("选中的行里没有可以直接采用的：\n" + (missing > 0 ? $"· {missing} 行原值有缺项或冲突，请在表格中核对补全或设为不纳入。\n" : "") +
                 (revised > 0 ? $"· {revised} 行已是人工修订，未改动。\n" : "") +
                 (excluded > 0 ? $"· {excluded} 行已设为不纳入，未改动。" : ""), "采用图纸", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
@@ -1694,7 +1722,9 @@ public partial class MainWindow : Window
         if (entry.ItemId != null && text.Contains("尚未复核"))
             return "这条明细还未核对：请核对原图，并选择采用图纸、人工修订或不纳入。";
         if (entry.ItemId != null && text.Contains("仍有缺值"))
-            return "这条明细仍有缺项：请对照原图，直接在表格中补充图号、数量、单位、材质或工艺。";
+            return _task?.Kind == EngineKind.Accuracy
+                ? "这条明细仍有缺项：请对照原图补充图号、数量、单位、材质或工艺。"
+                : "这条明细缺少图号或材质，请对照原图补充。";
         if (entry.ItemId != null && text.Contains("必须填写复核说明"))
             return "这条明细仍需处理，请对照原图检查并在表格中修改，或选择处理方式。";
         if (entry.ItemId != null && text.Contains("不纳入须说明原因"))
@@ -1711,8 +1741,12 @@ public partial class MainWindow : Window
         switch (dto.Status)
         {
             case "ready":
+                string treatment = dto.TreatmentExceptions.Count == 0 ? "" :
+                    $"\n其中 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认，导出时须另行确认。";
+                string quantity = dto.QuantityHandoffs.Count == 0 ? "" :
+                    $"\n其中 {dto.QuantityHandoffs.Count} 条的数量或单位可留空，到 Excel 补填。";
                 Status($"校验通过：可导出 {dto.Accepted.Count} 条，排除 {dto.Excluded.Count} 条");
-                MessageBox.Show(this, $"校验通过。\n将导出 {dto.Accepted.Count} 条确认明细，另有 {dto.Excluded.Count} 条被排除。", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, $"校验通过。\n将纳入 {dto.Accepted.Count} 条明细，另有 {dto.Excluded.Count} 条被排除。{quantity}{treatment}", "校验", MessageBoxButton.OK, MessageBoxImage.Information);
                 break;
             case "nothing_to_export":
                 Status("校验通过，但所有明细都被排除，没有可导出的内容");
@@ -1883,8 +1917,9 @@ public partial class MainWindow : Window
         catch { chosen?.Dispose(); throw; }
     }
 
-    static bool CanPreviewAdopt(ItemRow row, ISet<string> excludedFiles) =>
+    bool CanPreviewAdopt(ItemRow row, ISet<string> excludedFiles) =>
         !excludedFiles.Contains(row.FileId) && (DuplicateQuantity.CanProposeDefault(row) ||
+        (_task?.Kind == EngineKind.Segmented && Rules.CanPreviewQuantityHandoff(row)) ||
         (!row.IsCrossedOut && row.Mode == Rules.Pending && row.IsCompleteOriginal && !row.HasOverride &&
         row.Src.RequiresReviewSpecified && !row.Src.RequiresReview && row.Src.WarningsSpecified && string.IsNullOrWhiteSpace(row.Warnings) &&
         string.IsNullOrWhiteSpace(row.Note)));
@@ -2062,8 +2097,9 @@ public partial class MainWindow : Window
     }
 
     static string DecisionSignature(ValidationDto dto) =>
-        string.Join("\n", dto.Accepted.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal)) + "\n--EXCLUDED--\n" +
-        string.Join("\n", dto.Excluded.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal));
+        string.Join("\n", dto.Accepted.Select(item => item.GetRawText())) + "\n--EXCLUDED--\n" +
+        string.Join("\n", dto.Excluded.Select(item => item.GetRawText()).OrderBy(x => x, StringComparer.Ordinal)) +
+        "\n--QUANTITY--\n" + JsonSerializer.Serialize(dto.QuantityHandoffs, Json.Options);
 
     static bool HasCompleteDecisionCoverage(TaskSession task, ValidationDto dto)
     {
@@ -2199,6 +2235,16 @@ public partial class MainWindow : Window
             if (proposed.Count > 0)
                 scope = $"本次包含所有图纸，不限于当前显示的明细。确认后，{proposed.Count} 条待复核明细将按图纸识别值采用。" +
                     Environment.NewLine + Environment.NewLine + scope;
+            if (dto.TreatmentExceptions.Count > 0)
+                scope = $"有 {dto.TreatmentExceptions.Count} 条表面处理缺值或待确认；本次还会单独询问是否留空导出。" +
+                    Environment.NewLine + Environment.NewLine + scope;
+            if (dto.QuantityHandoffs.Count > 0)
+            {
+                string examples = string.Join("、", dto.QuantityHandoffs.Take(8).Select(x => $"{x.DrawingNumber}（{x.MissingLabel}）"));
+                string more = dto.QuantityHandoffs.Count > 8 ? " 等" : "";
+                scope = $"有 {dto.QuantityHandoffs.Count} 条明细的数量或单位待补。确认后只留空缺失字段，请在 Excel 补填，再用于报价。"+
+                    Environment.NewLine + examples + more + Environment.NewLine + Environment.NewLine + scope;
+            }
             int duplicateSums = task.Items.Count(i => proposed.Contains(i.Id) && DuplicateQuantity.CanProposeSum(i));
             if (duplicateSums > 0)
                 scope = $"确认后将批量采用 {duplicateSums} 条重复图号的默认累加数量；请逐条核对以下各处图框及计入范围。" +
@@ -2298,6 +2344,28 @@ public partial class MainWindow : Window
                 return false;
             }
         }
+        string? allowBlankTreatmentFor = null;
+        if (dto.TreatmentExceptions.Count != 0)
+        {
+            long finalVersion = _editVersion;
+            try
+            {
+                if (!ConfirmTreatmentExceptions(task, dto))
+                { Status("已返回核对，没有导出。"); return false; }
+            }
+            catch (Exception ex)
+            {
+                _showDialog(ex.Message, "无法确认表面处理", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            if (!ReferenceEquals(_task, task) || _editVersion != finalVersion)
+            {
+                _showDialog("明细在确认期间发生变化，请重新核对后再导出。",
+                    "请重新确认", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+            allowBlankTreatmentFor = dto.ReviewSha256;
+        }
         SetBusy(true);
         Status("正在导出…");
         ValidationDto exported;
@@ -2305,7 +2373,8 @@ public partial class MainWindow : Window
         try
         {
             folder = ExportFolderFactory();
-            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!);
+            exported = await task.ExportQuotationWithArchiveLockAsync(folder, reviewer, dto.ReviewSha256!, allowBlankTreatmentFor: allowBlankTreatmentFor,
+                allowBlankQuantityFor: dto.QuantityHandoffs.Count == 0 ? null : dto.ReviewSha256);
             if (exported.Status != "ready" || !File.Exists(Path.Combine(folder, "确认明细.xlsx")))
                 throw new IOException("引擎没有完成导出：" + (exported.Error ?? string.Join("\n", exported.Errors.Take(5))));
             if (!string.Equals(exported.ReviewSha256, dto.ReviewSha256, StringComparison.OrdinalIgnoreCase))
@@ -2326,7 +2395,9 @@ public partial class MainWindow : Window
         }
         finally { SetBusy(false); }
         Status(receiptFailure == null ? "已导出：" + destination.Path : "文件已保存，但内部保存记录写入失败。");
-        string resultMessage = $"已导出 {exported.Accepted.Count} 条确认明细（排除 {exported.Excluded.Count} 条）。\n\n{destination.Path}" +
+        string resultMessage = $"已导出 {exported.Accepted.Count} 条明细（排除 {exported.Excluded.Count} 条）。" +
+            (exported.QuantityHandoffs.Count == 0 ? "" : $"\n其中 {exported.QuantityHandoffs.Count} 条的数量或单位待补，请在 Excel 填写。") +
+            $"\n\n{destination.Path}" +
             (backup == null ? "" : "\n\n替换前文件备份：" + backup);
         _lastExportedPath = destination.Path;
         _lastExportWarning = receiptFailure;

@@ -15,6 +15,84 @@ public static class DesktopIntegrationSelfTest
 {
     const BindingFlags Private = BindingFlags.Instance | BindingFlags.NonPublic;
 
+    // Real import handlers with an empty DWG fixture and a known readable DWG.
+    public static async Task<int> RunRecognitionAsync(string output, string? empty, string? nonempty)
+    {
+        if (Directory.Exists(output)) throw new ArgumentException("Use a new output directory.");
+        Directory.CreateDirectory(output);
+        Engine.SessionsRoot = Path.Combine(output, "sessions");
+        var dialogs = new List<(string Text, string Title)>();
+        var window = new MainWindow(false, (text,title,_,_) =>
+            { dialogs.Add((text,title)); return MessageBoxResult.OK; }, null)
+        { Left=-20000, Top=-20000, ShowActivated=false, ShowInTaskbar=false, WindowStartupLocation=WindowStartupLocation.Manual };
+        string Label(string name) => ((TextBlock)window.FindName(name)).Text;
+        var checks = new List<string>();
+        void Check(string label, bool condition)
+        {
+            checks.Add((condition ? "PASS " : "FAIL ") + label);
+            if (!condition) throw new InvalidOperationException(label);
+        }
+        try
+        {
+            window.Show();
+            await window.Dispatcher.InvokeAsync(window.UpdateLayout, DispatcherPriority.ApplicationIdle);
+            await window.RenderToPngAsync(Path.Combine(output,"home.png"));
+            var newButton = (Button)window.FindName("NewButton");
+            Check("normal homepage enables choosing drawings", newButton.IsEnabled && Label("WelcomeNotice").Length == 0);
+            if (empty == null || nonempty == null) return 0;
+
+            async Task FinishImport(string entry)
+            {
+                var progress = (FrameworkElement)window.FindName("RunningPanel");
+                Check(entry + " reaches the actual import", progress.Visibility == Visibility.Visible);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMinutes(3));
+                while (progress.Visibility == Visibility.Visible) await Task.Delay(50, timeout.Token);
+            }
+            int pickerCalls = 0;
+            window.RecognitionFilePicker = () => { pickerCalls++; return [nonempty]; };
+            newButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
+            await FinishImport("homepage selection");
+            Check("homepage selection produces an opened nonempty review", pickerCalls == 1 && dialogs.Count == 0 &&
+                Label("StatusText") == "已完成 1 / 1 张图纸。" && window.ActiveTaskSummary.Contains("条"));
+
+            // Exercise WPF's registered preview events rather than calling the importer.
+            var dragConstructor = typeof(DragEventArgs).GetConstructor(BindingFlags.Instance | BindingFlags.NonPublic,
+                null, [typeof(IDataObject), typeof(DragDropKeyStates), typeof(DragDropEffects), typeof(DependencyObject), typeof(Point)], null)!;
+            var fileDrop = new DataObject(DataFormats.FileDrop, new[] { empty });
+            DragEventArgs Drag(RoutedEvent route)
+            {
+                var ev = (DragEventArgs)dragConstructor.Invoke([fileDrop, DragDropKeyStates.LeftMouseButton,
+                    DragDropEffects.Copy, window, new Point(1,1)]);
+                ev.RoutedEvent = route;
+                return ev;
+            }
+            var over = Drag(DragDrop.PreviewDragOverEvent);
+            window.RaiseEvent(over);
+            Check("dragging a DWG is accepted", over.Effects == DragDropEffects.Copy);
+            window.RaiseEvent(Drag(DragDrop.PreviewDropEvent));
+            await FinishImport("drag and drop");
+            Check("empty import reports no details", Label("StatusText")==Engine.NoDetailsMessage && dialogs.Count==0);
+            Check("empty task retains visible warning and is not marked processed",
+                Label("WorkflowHint")==Engine.NoDetailsMessage && window.ActiveTaskSummary=="未提取到明细");
+            await window.RenderToPngAsync(Path.Combine(output,"empty-import.png"));
+            // These two small fixtures fit within 1 GiB per worker; keep the
+            // coordinator's normal system reserve, lock and admission checks.
+            await window.ImportDrawingsAsync([nonempty,empty], ParallelRecognition.Limits() with { MemoryMiB=1024 });
+            Check("mixed batch completes both and identifies the empty drawing",
+                Label("StatusText").Contains("已完成 2 / 2") && Label("StatusText").Contains("其中 1 张") &&
+                dialogs.Count==1 && dialogs[0].Title=="识别结果" &&
+                dialogs[0].Text.Contains("未提取到明细，请对照原图：\n"+Path.GetFileName(empty)));
+            return 0;
+        }
+        catch (Exception ex) { checks.Add("ERROR " + ex); return 1; }
+        finally
+        {
+            window.Close();
+            File.WriteAllLines(Path.Combine(output,"recognition-checks.txt"),
+                checks.Concat(dialogs.Select(d=>"DIALOG "+d.Title+": "+d.Text)));
+        }
+    }
+
     public static async Task<int> RunAsync(string output, IReadOnlyList<string> reviews)
     {
         if (Directory.Exists(output) || reviews.Count != 3) throw new ArgumentException("Use a new output and exactly three synthetic reviews.");

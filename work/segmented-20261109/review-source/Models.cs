@@ -13,7 +13,8 @@ public sealed record DefaultDecision(string Mode,string Note);
 public sealed record ReviewItem(string Id,string FileId,CadValues Cad,string Warnings,bool RequiresReview,string Kind,string[] Parents,string QuantityEvidence,string TreatmentEvidence,string ReferenceInfo,DefaultDecision? DefaultDecision=null,[property:JsonIgnore(Condition=JsonIgnoreCondition.WhenWritingNull)] JsonElement? Duplicate=null);
 public sealed record ReviewDataset(int SchemaVersion,string TaskId,string Title,SourceFile[] Sources,ReviewFile[] Files,ReviewItem[] Items);
 public sealed record FileDecision(string FileId,string State,string Note,string ParentChildNote);
-public sealed record AcceptedItem(string Id,string FileId,string Mode,CadValues Original,CadValues Final,string Reason,string[] Parents);
+public sealed record AcceptedItem(string Id,string FileId,string Mode,CadValues Original,CadValues Final,string Reason,string[] Parents,string TreatmentDisposition);
+public sealed record TreatmentException(string Id,string FileId,string DrawingNumber,string Disposition);
 public sealed record ExcludedItem(string Id,string FileId,string DrawingNumber,string Reason);
 public sealed class ValidationResult
 {
@@ -25,6 +26,10 @@ public sealed class ValidationResult
     public List<AcceptedItem> Accepted {get;}=[];
     public List<ExcludedItem> Excluded {get;}=[];
     public List<FileDecision> Files {get;}=[];
+    public List<TreatmentException> TreatmentExceptions {get;}=[];
+    public List<QuantityHandoff> QuantityHandoffs {get;}=[];
+    public string? BlankQuantityApprovedReviewSha256 {get;set;}
+    public string? BlankTreatmentApprovedReviewSha256 {get;set;}
     public int Pending {get;set;}
 }
 public static class JsonData

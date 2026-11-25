@@ -151,7 +151,9 @@ try
                             while (left < right && (char.IsWhiteSpace(text[left]) || text[left] == '\ufeff')) left++;
                             while (right > left && (char.IsWhiteSpace(text[right - 1]) || text[right - 1] == '\ufeff')) right--;
                             string trimmed = text[left..right];
-                            if (trimmed == "PART No." || trimmed.ToUpperInvariant() == "NUMBER")
+                            var partsList = trimmed == "PART NAME STANDARD" &&
+                                RequiredString(doc.RootElement, "blockPath", "texts").EndsWith("$0$부품 리스트", StringComparison.Ordinal);
+                            if (trimmed == "PART No." || trimmed.ToUpperInvariant() == "NUMBER" || partsList)
                             {
                                 observedAnchors.Add(new Anchor(RequiredString(doc.RootElement, "layout", "texts"), RequiredString(doc.RootElement, "blockPath", "texts")));
                             }

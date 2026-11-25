@@ -9,6 +9,10 @@ def main():
     ap.add_argument('mode', choices=('validate','export'))
     ap.add_argument('--manifest',required=True); ap.add_argument('--review',required=True)
     ap.add_argument('--output'); ap.add_argument('--reviewer')
+    ap.add_argument('--compatible-treatment-policy', action='store_true')
+    ap.add_argument('--allow-blank-treatment-for', metavar='REVIEW_SHA256')
+    ap.add_argument('--quantity-handoff', action='store_true')
+    ap.add_argument('--allow-blank-quantity-for', metavar='REVIEW_SHA256')
     ap.add_argument('--memory-mib',type=float,default=3072)
     ap.add_argument('--timeout',type=float,default=300)
     ap.add_argument('--cpu-percent',type=float,default=25)
@@ -26,10 +30,31 @@ def main():
     frozen_manifest=json.loads(manifest_path.read_text(encoding='utf-8'))
     runner.verify_frozen(frozen,frozen_manifest)
     program=frozen/'review-native/CadReviewWorkflow.exe'
-    args=[program,a.mode,'--manifest',source,'--review',review]
+    frozen_supports_policy=str(Path('review-source/TreatmentPolicy.cs')) in frozen_manifest
+    if not program.is_file():raise ValueError('Frozen review program is missing')
+    for approval in (a.allow_blank_treatment_for,a.allow_blank_quantity_for):
+        if approval is not None and (a.mode!='export' or len(approval)!=64 or
+            any(c not in '0123456789abcdefABCDEF' for c in approval)):
+            raise ValueError('A blank field approval must name the exact validated workbook SHA-256 for export')
+    if a.allow_blank_quantity_for and not a.quantity_handoff:
+        raise ValueError('Blank quantity approval requires the quantity handoff mode')
+    frozen_supports_handoff=str(Path('review-source/QuantityHandoff.cs')) in frozen_manifest
+    # New desktop review of old segmented tasks opts in to the current policy.
+    # The original task's complete frozen evidence is still checked and untouched.
+    if ((a.compatible_treatment_policy and not frozen_supports_policy) or
+        (a.quantity_handoff and not frozen_supports_handoff)):
+        program=runner.local_path(runner.ROOT/runner.APP_REL/'review-native/CadReviewWorkflow.exe',runner.ROOT)
+        if not program.is_file():raise ValueError('Current review policy is unavailable; rebuild the desktop and backend')
+    if a.allow_blank_treatment_for and not (a.compatible_treatment_policy or a.quantity_handoff or frozen_supports_policy):
+        raise ValueError('Use the current treatment policy for this legacy task')
+    mode=a.mode+'-v2' if a.quantity_handoff else (
+        a.mode+'-v1' if a.compatible_treatment_policy or a.allow_blank_treatment_for else a.mode)
+    args=[program,mode,'--manifest',source,'--review',review]
     if a.mode=='export':
         if not a.output or not a.reviewer:raise ValueError('Export requires output and reviewer')
         args+=['--output',a.output,'--reviewer',a.reviewer]
+        if a.allow_blank_treatment_for:args+=['--allow-blank-treatment-for',a.allow_blank_treatment_for]
+        if a.allow_blank_quantity_for:args+=['--allow-blank-quantity-for',a.allow_blank_quantity_for]
     args+=['--wait-for-go']
     logs=runner.ROOT/'outputs/segmented-review-operations'/(datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S')+'-'+uuid.uuid4().hex[:12])
     logs.mkdir(parents=True,exist_ok=False)
@@ -39,6 +64,8 @@ def main():
         result=runner.command(args,logs,a.mode,limits,wait_for_go=True)
         after={str(p):runner.sha(p) for p in (source,review)}
         result['input_sha256_before']=before;result['input_sha256_after']=after
+        result['review_program']=str(program)
+        result['review_command']=mode
         if after!=before:result.update(status='failed',returncode=1,blocked_reason='review_or_manifest_changed')
         runner.verify_frozen(frozen,frozen_manifest)
         if runner.sha(manifest_path)!=protocol['frozen_manifest_sha256']:

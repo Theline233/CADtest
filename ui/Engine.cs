@@ -25,6 +25,7 @@ public static class Engine
     // 与引擎默认限制一致，提前在界面里拦截，避免整批被拒绝
     public const int MaxFiles = 20;
     public const double MaxFileMiB = 64, MaxBatchMiB = 256;
+    internal const string NoDetailsMessage = "图纸已读入，但未提取到明细。请对照原图检查标题栏。";
 
     static string SegmentedDir => Path.Combine(Root, @"work\segmented-20261109");
     static string AccuracyDir => Path.Combine(Root, @"work\accuracy-20261109");
@@ -53,9 +54,9 @@ public static class Engine
         return python == null || node == null ? null : (python, node);
     }
 
+    const string BundledPython = @"runtime\python\python.exe", BundledNode = @"runtime\node\node.exe";
     internal static bool HasBundledRuntime =>
-        File.Exists(Path.Combine(Root, @"runtime\python\python.exe")) &&
-        File.Exists(Path.Combine(Root, @"runtime\node\node.exe"));
+        File.Exists(Path.Combine(Root, BundledPython)) && File.Exists(Path.Combine(Root, BundledNode));
 
     internal static void ConfigureChild(ProcessStartInfo start)
     {
@@ -296,18 +297,24 @@ public static class Engine
     }
 
     // ───────────── 校验 / 导出 ─────────────
-    static ProcessStartInfo ReviewCommand(EngineKind kind, string mode, string manifest, string review, string? output, string? reviewer)
+    static ProcessStartInfo ReviewCommand(EngineKind kind, string mode, string manifest, string review, string? output, string? reviewer,
+        bool compatibleTreatmentPolicy, string? allowBlankTreatmentFor = null, bool quantityHandoff = false, string? allowBlankQuantityFor = null)
     {
         var extra = new List<string>();
         if (output != null) { extra.Add("--output"); extra.Add(output); extra.Add("--reviewer"); extra.Add(reviewer ?? ""); }
 
         if (kind == EngineKind.Accuracy)
         {
+            if (allowBlankTreatmentFor != null || allowBlankQuantityFor != null) throw new InvalidOperationException("旧识别引擎不支持留空确认。");
             var psi = new ProcessStartInfo(AccuracyReviewExe);
             foreach (var a in new[] { mode, "--manifest", manifest, "--review", review }.Concat(extra)) psi.ArgumentList.Add(a);
             return psi;
         }
 
+        if (compatibleTreatmentPolicy) extra.Add("--compatible-treatment-policy");
+        if (allowBlankTreatmentFor != null) { extra.Add("--allow-blank-treatment-for"); extra.Add(allowBlankTreatmentFor); }
+        if (quantityHandoff) extra.Add("--quantity-handoff");
+        if (allowBlankQuantityFor != null) { extra.Add("--allow-blank-quantity-for"); extra.Add(allowBlankQuantityFor); }
         // 直接启动守护程序，避免 cmd 展开复核人或路径中的 %、&、引号等字符。
         // 分段版冻结的 .NET 程序明确设置 UTF-8；Python 也显式使用 UTF-8。
         if (!File.Exists(SegmentedGuard)) throw new FileNotFoundException("分段任务的复核守护程序缺失：" + SegmentedGuard);
@@ -326,15 +333,16 @@ public static class Engine
         if (KindFor(folder) != kind) throw new InvalidOperationException("任务的引擎类型已改变，请重新打开任务；本次未执行校验或导出。");
     }
 
-    public static async Task<ValidationDto> ValidateAsync(EngineKind kind, string manifest, string review, CancellationToken ct = default)
+    public static async Task<ValidationDto> ValidateAsync(EngineKind kind, string manifest, string review, CancellationToken ct = default, bool compatibleTreatmentPolicy = false, bool quantityHandoff = false)
     {
-        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "validate", manifest, review, null, null), ct)); }
+        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "validate", manifest, review, null, null, compatibleTreatmentPolicy, quantityHandoff: quantityHandoff), ct)); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { return new ValidationDto { Status = "failed", Error = ex.Message }; }
     }
 
-    public static async Task<ValidationDto> ExportAsync(EngineKind kind, string manifest, string review, string output, string reviewer, CancellationToken ct = default)
+    public static async Task<ValidationDto> ExportAsync(EngineKind kind, string manifest, string review, string output, string reviewer, CancellationToken ct = default, bool compatibleTreatmentPolicy = false, string? allowBlankTreatmentFor = null, string? allowBlankQuantityFor = null)
     {
-        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "export", manifest, review, output, reviewer), ct)); }
+        try { EnsureReviewKind(kind, manifest); return Parse(await RunCaptureAsync(ReviewCommand(kind, "export", manifest, review, output, reviewer,
+            compatibleTreatmentPolicy, allowBlankTreatmentFor, allowBlankQuantityFor != null, allowBlankQuantityFor), ct)); }
         catch (Exception ex) when (ex is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.ComponentModel.Win32Exception) { return new ValidationDto { Status = "failed", Error = ex.Message }; }
     }
 
@@ -394,15 +402,51 @@ public static class Engine
         return psi;
     }
 
+    sealed record RecognitionLaunch(string Script, string? Shell, string Python, string Node);
+
+    static RecognitionLaunch? ResolveRecognitionLaunch(out string? issue)
+    {
+        string? script, shell = null;
+        if (HasBundledRuntime || File.Exists(Path.Combine(Root, "PACKAGE-INFO.json")))
+        {
+            script = Path.Combine(SegmentedDir, "runner.py");
+            foreach (string file in new[] { Path.Combine(Root, BundledPython), Path.Combine(Root, BundledNode), script })
+            {
+                if (File.Exists(file)) continue;
+                issue = "安装文件不完整，缺少 " + Path.GetRelativePath(Root, file) + "。请用完整安装包覆盖安装，或重新解压便携版。";
+                return null;
+            }
+        }
+        else
+        {
+            script = RecognizeScript;
+            if (script == null) { issue = "找不到识别入口脚本：" + SegmentedScript; return null; }
+            shell = FindShell();
+            if (shell == null) { issue = "找不到 PowerShell 7。旧脚本识别需要 PowerShell 7，也可使用带运行时的安装包。"; return null; }
+        }
+        var runtime = FindParallelRuntime();
+        if (runtime == null)
+        {
+            issue = "找不到可用的 Python 或 Node.js。请检查 CADTEST_PYTHON / CADTEST_NODE 和 PATH。";
+            return null;
+        }
+        issue = null;
+        return new(script, shell, runtime.Value.Python, runtime.Value.Node);
+    }
+
+    internal static string? RecognitionStartupIssue()
+    {
+        ResolveRecognitionLaunch(out var issue);
+        return issue;
+    }
+
     public static async Task<RecognizeOutcome> RecognizeAsync(IReadOnlyList<string> drawings, string outputDir,
         Action<string> log, CancellationToken ct)
     {
-        var runtime = FindParallelRuntime();
-        if (runtime == null) return new(false, "", "找不到 Python 或 Node.js。请安装运行时并加入 PATH，或设置 CADTEST_PYTHON / CADTEST_NODE。");
-        var python = runtime.Value.Python;
-        var node = runtime.Value.Node;
+        var launch = ResolveRecognitionLaunch(out var issue);
+        if (launch == null) return new(false, "", issue!);
         RunOutcome run;
-        if (HasBundledRuntime)
+        if (launch.Shell == null)
         {
             string full = Path.GetFullPath(outputDir);
             string prefix = Path.TrimEndingDirectorySeparator(Path.GetFullPath(OutputsRoot)) + Path.DirectorySeparatorChar;
@@ -411,24 +455,24 @@ public static class Engine
             var plan = ResourceAuto.Current();
             log(plan.Describe());
             if (plan.Warning != null) log(plan.Warning);
-            var direct = new ProcessStartInfo(python);
-            foreach (string value in new[] { "-B", "-X", "utf8", Path.Combine(SegmentedDir, "runner.py"),
-                "--output", Path.Combine(full, "recognition"), "--node", node, "--prepare-review" }
+            var direct = new ProcessStartInfo(launch.Python);
+            foreach (string value in new[] { "-B", "-X", "utf8", launch.Script,
+                "--output", Path.Combine(full, "recognition"), "--node", launch.Node, "--prepare-review" }
                 .Concat(ResourceAuto.RecognizeArgs(plan)).Concat(new[] { "--drawing" }).Concat(drawings))
                 direct.ArgumentList.Add(value);
             run = await RunLinesAsync(direct, log, ct);
         }
         else
-        {
-            var shell = FindShell();
-            if (shell == null) return new(false, "", "找不到 PowerShell 7。请安装 PowerShell 7 或设置 CADTEST_POWERSHELL。");
-            var script = RecognizeScript;
-            if (script == null) return new(false, "", "找不到识别入口脚本：" + SegmentedScript);
-            run = await RunLinesAsync(RecognitionCommand(shell, script, drawings, outputDir, python, node), log, ct);
-        }
+            run = await RunLinesAsync(RecognitionCommand(launch.Shell, launch.Script, drawings, outputDir, launch.Python, launch.Node), log, ct);
         var review = Path.Combine(outputDir, "review");
         if (run.ExitCode == 0 && File.Exists(Path.Combine(review, "source.json")) && File.Exists(Path.Combine(review, "图纸复核.xlsx")))
-            return new(true, review, "识别完成");
+        {
+            using var source = File.OpenRead(Path.Combine(review, "source.json"));
+            using var data = JsonDocument.Parse(source);
+            bool empty = data.RootElement.TryGetProperty("items", out var items) &&
+                items.ValueKind == JsonValueKind.Array && items.GetArrayLength() == 0;
+            return new(true, review, empty ? NoDetailsMessage : "识别完成");
+        }
         return new(false, review, Diagnose(outputDir, run));
     }
 
