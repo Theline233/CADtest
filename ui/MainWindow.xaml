@@ -264,6 +264,15 @@
                                VerticalAlignment="Center" Margin="5,1,0,0" ToolTip="可双击修改"/>
                 </StackPanel>
             </DataTemplate>
+            <DataTemplate x:Key="TreatmentHeader">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding}" VerticalAlignment="Center"/>
+                    <Button Content="批量替换…" Style="{StaticResource Ghost}" Foreground="{StaticResource AccentStrong}"
+                            FontSize="12" Padding="5,2" MinHeight="26" Margin="4,0,0,0" Click="BulkTreatment_Click"
+                            AutomationProperties.Name="批量替换表面处理"
+                            ToolTip="只替换当前图纸中选中行的表面处理（Ctrl 或 Shift 多选）"/>
+                </StackPanel>
+            </DataTemplate>
         </ResourceDictionary>
     </Window.Resources>
 
@@ -672,9 +681,11 @@
                                                 ToolTip="对照原图后，按图纸识别值采用选中行（Ctrl/Shift 多选）">采用图纸</Button>
                                         <Button Style="{StaticResource Ghost}" Tag="&#xE894;" Click="BulkExclude_Click" ToolTip="选中行不纳入本次报价">不纳入…</Button>
                                         <Button x:Name="BulkResetButton" Style="{StaticResource Ghost}" Tag="&#xE7A7;" Click="BulkReset_Click" ToolTip="清除确认值和说明，恢复为待复核">恢复待复核</Button>
-                                        <Button x:Name="RowMoreButton" Style="{StaticResource Ghost}" Tag="&#xE712;" Click="DropDown_Click" ToolTip="重复图号与打X处理">
+                                        <Button x:Name="RowMoreButton" Style="{StaticResource Ghost}" Tag="&#xE712;" Click="DropDown_Click" ToolTip="表面处理、重复图号与打X处理">
                                             <Button.ContextMenu>
                                                 <ContextMenu Style="{StaticResource MenuCard}">
+                                                    <MenuItem Header="表面处理：批量替换…" Tag="&#xE8AC;" Click="BulkTreatment_Click"/>
+                                                    <Separator/>
                                                     <MenuItem Header="重复图号：按一处计" Tag="&#xE8C8;" Click="DuplicateSingle_Click"/>
                                                     <MenuItem Header="重复图号：改回累加" Tag="&#xE948;" Click="DuplicateSum_Click"/>
                                                     <Separator/>
@@ -755,7 +766,7 @@
                                     </DataGridTemplateColumn>
                                     <DataGridTextColumn Header="部品名" HeaderTemplate="{StaticResource EditHeader}" Binding="{Binding EditName, UpdateSourceTrigger=Explicit}" Width="130" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
                                     <DataGridTextColumn Header="材质" HeaderTemplate="{StaticResource EditHeader}" Binding="{Binding EditMaterial, UpdateSourceTrigger=Explicit}" Width="90" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
-                                    <DataGridTextColumn Header="表面处理" HeaderTemplate="{StaticResource EditHeader}" Binding="{Binding EditTreatment, UpdateSourceTrigger=Explicit}" Width="110" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
+                                    <DataGridTextColumn Header="表面处理" HeaderTemplate="{StaticResource TreatmentHeader}" Binding="{Binding EditTreatment, UpdateSourceTrigger=Explicit}" Width="152" MinWidth="152" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
                                     <DataGridTextColumn Header="数量" HeaderTemplate="{StaticResource EditHeader}" Binding="{Binding EditQuantity, UpdateSourceTrigger=Explicit}" Width="72" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
                                     <DataGridTextColumn Header="单位" HeaderTemplate="{StaticResource EditHeader}" Binding="{Binding EditUnit, UpdateSourceTrigger=Explicit}" Width="64" CellStyle="{StaticResource EditCell}" ElementStyle="{StaticResource CellText}" EditingElementStyle="{StaticResource EditCellTextBox}"/>
                                     <DataGridTextColumn Header="类别" Binding="{Binding KindText}" IsReadOnly="True" Width="64" ElementStyle="{StaticResource MutedCellText}"/>
