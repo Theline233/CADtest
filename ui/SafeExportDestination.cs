@@ -153,6 +153,20 @@ internal sealed class SafeExportDestination : IDisposable
         if (_originalIdentity == IdentityOf(Info(sourceStream.SafeFileHandle)))
             throw new IOException("保存目标与引擎格式化文件相同，不能覆盖。");
 
+        return PublishVerified(sourceStream, sourceHash);
+    }
+
+    // A draft is prepared and independently reopened in memory, not approved by
+    // the review engine. Keep the same destination, backup and atomic write path.
+    internal string? PublishDraft(byte[] workbook)
+    {
+        if (_published) throw new InvalidOperationException("该保存选择已经使用。");
+        using var sourceStream = new MemoryStream(workbook, writable: false);
+        return PublishVerified(sourceStream, Convert.ToHexString(SHA256.HashData(workbook)));
+    }
+
+    private string? PublishVerified(Stream sourceStream, string sourceHash)
+    {
         string stagePath = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Path)!, ".cadreview-stage-" + Guid.NewGuid().ToString("N") + ".tmp");
         using var stageHandle = Open(stagePath, Read | Write | Delete, ShareRead, CreateNew, WriteThrough);
         bool renamed = false;
@@ -211,7 +225,7 @@ internal sealed class SafeExportDestination : IDisposable
                 }
                 catch (Exception ex)
                 {
-                    throw new IOException("文件已发布，但重新打开或校验失败；请检查所选路径及保留的引擎输出。" +
+                    throw new IOException("文件已发布，但重新打开或校验失败；请检查所选路径。" +
                         (backup == null ? "" : " 原文件备份：" + backup) + " " + ex.Message, ex);
                 }
                 _published = true;

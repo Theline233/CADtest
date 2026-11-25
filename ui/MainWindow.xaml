@@ -533,7 +533,7 @@
                                         <Button Style="{StaticResource Btn}" Tag="&#xE8A7;" HorizontalAlignment="Stretch"
                                                 Click="OpenDrawing_Click" ToolTip="用系统关联程序（如 AutoCAD）打开这张原图">用 AutoCAD 打开原图</Button>
                                         <TextBlock x:Name="FileGuidanceText" Foreground="{StaticResource Text2}" FontSize="12" TextWrapping="Wrap" Margin="2,8,0,0"
-                                                   Text="打开原图核对明细，导出时确认即可。"/>
+                                                   Text="用 AutoCAD 对照原图核对明细。"/>
                                         <Expander x:Name="AdvancedFileOptions" Header="更多图纸选项" Style="{StaticResource SectionExpander}" Margin="-4,6,0,0">
                                             <StackPanel Margin="4,4,0,0">
                                                 <TextBlock Text="诊断摘要 · 请对照原图" Style="{StaticResource Label}" Foreground="{StaticResource Warning}" FontWeight="SemiBold"/>
@@ -601,14 +601,16 @@
                             </Style>
                         </Grid.Style>
                         <StackPanel x:Name="HeaderActions" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" WindowChrome.IsHitTestVisibleInChrome="True">
-                            <TextBox x:Name="ReviewerBox" Width="92" VerticalAlignment="Center" Tag="复核人" Margin="0,0,6,0" Padding="8,3" ToolTip="复核人（导出时记录）"/>
+                            <TextBox x:Name="ReviewerBox" Width="92" VerticalAlignment="Center" Tag="复核人" Margin="0,0,6,0" Padding="8,3" ToolTip="仅复核并导出时需要填写"/>
                             <Button Style="{StaticResource IconOnly}" Tag="&#xE74E;" Click="Save_Click" ToolTip="保存（Ctrl+S；改动每 15 秒自动保存）" Margin="0,0,2,0"/>
                             <Button x:Name="ValidateButton" Style="{StaticResource Ghost}" Tag="&#xE9D5;" Click="Validate_Click" Foreground="{StaticResource Text2}"
-                                    ToolTip="检查是否还有未处理的问题（不导出）">校验</Button>
+                                    ToolTip="检查复核版导出还需处理的问题（不导出）">校验</Button>
                             <Button x:Name="MoreButton" Style="{StaticResource IconOnly}" Tag="&#xE712;" Margin="0,0,10,0" Click="DropDown_Click" ToolTip="更多操作">
                                 <Button.ContextMenu>
                                     <ContextMenu Style="{StaticResource MenuCard}">
                                         <MenuItem Header="批量导出（勾选图纸）…" Tag="&#xE896;" Click="BatchExport_Click"/>
+                                        <MenuItem Header="复核并导出 Excel…" Tag="&#xE9D5;" Click="ReviewedExport_Click"/>
+                                        <MenuItem Header="批量复核并导出…" Tag="&#xE9D5;" Click="BatchReviewedExport_Click"/>
                                         <MenuItem Header="导入 Excel 复核表…" Tag="&#xE8E5;" Click="ImportExcel_Click"/>
                                         <MenuItem Header="用 AutoCAD 打开原图" Tag="&#xE8A7;" Click="OpenDrawing_Click"/>
                                         <Separator/>
@@ -617,7 +619,7 @@
                                 </Button.ContextMenu>
                             </Button>
                             <Button x:Name="ExportButton" Style="{StaticResource Primary}" Tag="&#xE896;" Padding="14,5" Click="Export_Click"
-                                    ToolTip="确认本次范围后选择保存位置">确认并导出 Excel</Button>
+                                    ToolTip="直接保存当前明细为待核对 Excel，不要求完成复核">直接导出 Excel</Button>
                         </StackPanel>
                         <StackPanel x:Name="HeaderSummary" VerticalAlignment="Center" Margin="0,0,16,0">
                             <TextBlock x:Name="TitleText" FontSize="17" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
@@ -637,7 +639,7 @@
                     <DockPanel Grid.Row="1" Margin="22,0,16,10">
                         <TextBlock Text="&#xE946;" Style="{StaticResource IconText}" FontSize="13" Foreground="{StaticResource Accent}" Margin="0,1,8,0" VerticalAlignment="Top"/>
                         <TextBlock x:Name="WorkflowHint" Foreground="{StaticResource Text2}" FontSize="12.5" TextWrapping="Wrap"
-                                   Text="请用 AutoCAD 打开原图核对明细，导出时确认即可。"/>
+                                   Text="可直接导出当前明细，缺项留空；正式报价前请核对。"/>
                     </DockPanel>
 
                     <!-- 分段筛选；“图面打X / 重复图号 / 有校验问题 / 原值缺项”只在有内容时出现 -->

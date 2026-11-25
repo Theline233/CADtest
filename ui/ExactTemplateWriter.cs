@@ -11,10 +11,9 @@ using System.Xml.Linq;
 
 namespace CadReviewUI;
 
-// These are already-confirmed values. Unit remains in the existing review record;
-// the reference quotation displays only the numeric quantity.
+// Unit remains in the review record; the quotation displays only quantity.
 internal sealed record ExactQuotationRow(
-    string Id, string FileId, string DrawingNumber, string? Name, string Material,
+    string Id, string FileId, string? DrawingNumber, string? Name, string? Material,
     string? Treatment, decimal? Quantity, string? Unit, string FileName);
 
 internal static class ExactTemplateWriter
@@ -36,11 +35,12 @@ internal static class ExactTemplateWriter
 
     // Only an in-memory copy is modified. The caller owns template-hash checking,
     // review/confirmation, publication and persistence of the unit and audit data.
-    internal static byte[] Build(byte[] templateBytes, IReadOnlyList<ExactQuotationRow> rows)
+    internal static byte[] Build(byte[] templateBytes, IReadOnlyList<ExactQuotationRow> rows, bool draft = false)
     {
         ArgumentNullException.ThrowIfNull(templateBytes);
         ArgumentNullException.ThrowIfNull(rows);
-        string caption = ValidateRows(rows);
+        string caption = ValidateRows(rows, draft);
+        if (draft) caption = "【待核对】" + caption;
         int detailCount = Math.Max(TemplateDetails, rows.Count);
         int lastDetail = checked(FirstDetailRow + detailCount - 1);
         int totalRow = checked(lastDetail + 1);
@@ -101,7 +101,12 @@ internal static class ExactTemplateWriter
         return output.ToArray();
     }
 
-    private static string ValidateRows(IReadOnlyList<ExactQuotationRow> rows)
+    internal static bool QuantityFitsExcel(decimal quantity) =>
+        quantity >= 0 &&
+        decimal.TryParse(((double)quantity).ToString("R", Invariant), NumberStyles.Float, Invariant, out decimal roundTrip) &&
+        roundTrip == quantity;
+
+    private static string ValidateRows(IReadOnlyList<ExactQuotationRow> rows, bool draft)
     {
         if (rows.Count == 0) throw new InvalidDataException("没有纳入的图纸明细。");
         if (rows.Count > ExcelLastRow - FirstDetailRow - 1)
@@ -111,9 +116,8 @@ internal static class ExactTemplateWriter
         foreach (ExactQuotationRow row in rows)
         {
             if (row == null || string.IsNullOrWhiteSpace(row.Id) || !ids.Add(row.Id) ||
-                string.IsNullOrWhiteSpace(row.FileId) || string.IsNullOrWhiteSpace(row.DrawingNumber) ||
-                string.IsNullOrWhiteSpace(row.Material) ||
-                string.IsNullOrWhiteSpace(row.FileName) || row.Quantity < 0)
+                string.IsNullOrWhiteSpace(row.FileId) || string.IsNullOrWhiteSpace(row.FileName) ||
+                (!draft && (string.IsNullOrWhiteSpace(row.DrawingNumber) || string.IsNullOrWhiteSpace(row.Material))))
                 throw new InvalidDataException("确认明细缺少必要字段、标识重复或数量无效。");
             CheckText(row.DrawingNumber);
             CheckText(row.Name);
@@ -121,14 +125,8 @@ internal static class ExactTemplateWriter
             CheckText(row.Treatment);
             CheckText(row.FileName);
 
-            if (row.Quantity is decimal quantity)
-            {
-                double asDouble = (double)quantity;
-                if (!double.IsFinite(asDouble) ||
-                    !decimal.TryParse(asDouble.ToString("R", Invariant), NumberStyles.Float, Invariant, out decimal roundTrip) ||
-                    roundTrip != quantity)
-                    throw new InvalidDataException("确认数量不能无损写入 Excel。");
-            }
+            if (row.Quantity is decimal quantity && !QuantityFitsExcel(quantity))
+                throw new InvalidDataException("数量无效或不能无损写入 Excel。");
             if (files.TryGetValue(row.FileId, out string? existingName))
             {
                 if (!string.Equals(existingName, row.FileName, StringComparison.Ordinal))
@@ -223,9 +221,9 @@ internal static class ExactTemplateWriter
             int r = FirstDetailRow + index;
             XElement detail = Row(rowMap, r);
             ExactQuotationRow value = rows[index];
-            SetText(Cell(detail, "C", r), value.DrawingNumber);
+            if (!string.IsNullOrEmpty(value.DrawingNumber)) SetText(Cell(detail, "C", r), value.DrawingNumber);
             if (!string.IsNullOrEmpty(value.Name)) SetText(Cell(detail, "D", r), value.Name);
-            SetText(Cell(detail, "E", r), value.Material);
+            if (!string.IsNullOrEmpty(value.Material)) SetText(Cell(detail, "E", r), value.Material);
             if (!string.IsNullOrEmpty(value.Treatment)) SetText(Cell(detail, "F", r), value.Treatment);
             if (value.Quantity is decimal quantity) SetNumber(Cell(detail, "G", r), quantity.ToString(Invariant));
         }

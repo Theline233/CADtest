@@ -210,6 +210,28 @@ public static class DesktopIntegrationSelfTest
             window.BatchFolderSelector=_=>cancelled;confirm=false;confirmations=0;
             await window.BatchExportAsync();
             Check("cancelled confirmations produce no files",Directory.GetFiles(cancelled,"*.xlsx").Length==0&&confirmations==2);
+
+            var drafts=Path.Combine(output,"draft-exports");Directory.CreateDirectory(drafts);
+            ((TextBox)window.FindName("ReviewerBox")).Text="";
+            var incomplete=Current().Items[0];
+            incomplete.EditMaterial="";
+            int previousDialogs=dialogs.Count;
+            window.BatchFolderSelector=_=>drafts;confirmations=0;
+            await window.BatchExportAsync(direct:true);
+            var draftFiles=Directory.GetFiles(drafts,"*.xlsx");
+            Check("direct batch saves only the two selected drafts without a reviewer or per-file dialogs",
+                draftFiles.Length==2 && confirmations==0 && dialogs.Count==previousDialogs+1 &&
+                dialogs[^1].Contains("2 / 2 张",StringComparison.Ordinal));
+            bool foundMissing=false;
+            foreach(var file in draftFiles)
+            {
+                using var book=new XLWorkbook(file);
+                var sheet=book.Worksheet("报价单样式");
+                Check("direct batch uses draft labels and retains amount formulas",
+                    sheet.Cell("C2").GetString().StartsWith("【待核对】",StringComparison.Ordinal) && sheet.Cell("I6").HasFormula);
+                foundMissing |= sheet.Cell("E6").IsEmpty();
+            }
+            Check("an incomplete row in the direct batch keeps its missing material blank",foundMissing);
             grid.SelectedItem=Current().Items[0];await Idle();
             ScrollViewer? FindScroll(DependencyObject parent)
             {

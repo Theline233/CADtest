@@ -228,7 +228,7 @@ public sealed class ItemRow : Notify
 
     // Decimal.TryParse can round long inputs. Compare canonical digits as well as
     // the decimal value so a rounded input is never mistaken for the original.
-    static bool SameQuantity(string input, string original)
+    internal static bool SameQuantity(string input, string original)
     {
         if (!decimal.TryParse(input, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) ||
             !decimal.TryParse(original, NumberStyles.Float, CultureInfo.InvariantCulture, out var source) || value != source ||
